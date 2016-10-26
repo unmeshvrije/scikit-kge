@@ -4,7 +4,7 @@ from collections import defaultdict
 from skge.param import Parameter, AdaGrad
 import timeit
 import pickle
-
+import pdb
 _cutoff = 30
 
 _DEF_NBATCHES = 100
@@ -38,12 +38,14 @@ class Model(object):
     - scores(self, ss, ps, os)
     - _gradients(self, xys) for StochasticTrainer
     - _pairwise_gradients(self, pxs, nxs) for PairwiseStochasticTrainer
+    C++ : Use virtual functions, make the Model class abstract by having pure virtual functions
     """
 
     def __init__(self, *args, **kwargs):
         #super(Model, self).__init__(*args, **)
         self.params = {}
         self.hyperparams = {}
+        # C++ : No named parameters. Emulate.
         self.add_hyperparam('init', kwargs.pop('init', 'nunif'))
 
     def add_param(self, param_id, shape, post=None, value=None):
@@ -129,7 +131,7 @@ class StochasticTrainer(object):
         idx = np.arange(len(xys))
         self.batch_size = np.ceil(len(xys) / self.nbatches)
         batch_idx = np.arange(self.batch_size, len(xys), self.batch_size)
-
+        pdb.set_trace()
         for self.epoch in range(1, self.max_epochs + 1):
             # shuffle training examples
             self._pre_epoch()
@@ -138,6 +140,7 @@ class StochasticTrainer(object):
             # store epoch for callback
             self.epoch_start = timeit.default_timer()
 
+            #pdb.set_trace()
             # process mini-batches
             for batch in np.split(idx, batch_idx):
                 # select indices for current batch
@@ -164,7 +167,16 @@ class StochasticTrainer(object):
 
     def _batch_step(self, grads):
         for paramID in self._updaters.keys():
+            #pdb.set_trace();
+            # *grads[paramID] unpacks argument list when calling the function, in this case CTOR
+            # Because _updaters is a dictionary
+            # _updaters[param] will be the value of type AdaGrad
+            # AdaGrad is subclass of ParameterUpdate
+            # ParameterUpdate class has a __call__ method
+            # This method is called when the instance of ParameterUpdate is called.
+            # C++ : functors, overload operator()
             self._updaters[paramID](*grads[paramID])
+            #pdb.set_trace();
 
 
 class PairwiseStochasticTrainer(StochasticTrainer):

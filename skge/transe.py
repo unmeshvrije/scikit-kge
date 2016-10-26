@@ -2,7 +2,7 @@ import numpy as np
 from skge.base import Model
 from skge.util import grad_sum_matrix, unzip_triples
 from skge.param import normalize
-
+import pdb
 
 class TransE(Model):
     """
@@ -11,6 +11,7 @@ class TransE(Model):
 
     def __init__(self, *args, **kwargs):
         super(TransE, self).__init__(*args, **kwargs)
+        # call's model class's functions to initialize "Parameter"s
         self.add_hyperparam('sz', args[0])
         self.add_hyperparam('ncomp', args[1])
         self.add_hyperparam('l1', kwargs.pop('l1', True))
@@ -18,6 +19,8 @@ class TransE(Model):
         self.add_param('R', (self.sz[2], self.ncomp))
 
     def _scores(self, ss, ps, os):
+        # This is the dissimilarity measure 'd' from the paper 
+        # Head + label and subtract Tail
         score = self.E[ss] + self.R[ps] - self.E[os]
         if self.l1:
             score = np.abs(score)
@@ -31,9 +34,13 @@ class TransE(Model):
         # indices of negative triples
         sn, pn, on = unzip_triples(nxs)
 
+        # Calculate d(h+l, t) = ||h+l-t||
         pscores = self._scores(sp, pp, op)
         nscores = self._scores(sn, pn, on)
+        #pdb.set_trace();
+        # ind contains all violating embeddings
         ind = np.where(nscores + self.margin > pscores)[0]
+        #pdb.set_trace();
 
         # all examples in batch satify margin criterion
         self.nviolations = len(ind)
@@ -49,8 +56,10 @@ class TransE(Model):
 
         #pg = self.E[sp] + self.R[pp] - self.E[op]
         #ng = self.E[sn] + self.R[pn] - self.E[on]
+        #pdb.set_trace()
         pg = self.E[op] - self.R[pp] - self.E[sp]
         ng = self.E[on] - self.R[pn] - self.E[sn]
+        #pdb.set_trace()
 
         if self.l1:
             pg = np.sign(-pg)
@@ -59,10 +68,15 @@ class TransE(Model):
             raise NotImplementedError()
 
         # entity gradients
+        # Sum of sp, op, sn, on = 10860(all entities)
         eidx, Sm, n = grad_sum_matrix(sp + op + sn + on)
+        pdb.set_trace();
         ge = Sm.dot(np.vstack((pg, -pg, ng, -ng))) / n
+        pdb.set_trace();
 
         # relation gradients
         ridx, Sm, n = grad_sum_matrix(pp + pn)
+        #pdb.set_trace();
         gr = Sm.dot(np.vstack((pg, ng))) / n
+        #pdb.set_trace();
         return {'E': (ge, eidx), 'R': (gr, ridx)}
