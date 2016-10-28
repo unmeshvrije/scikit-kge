@@ -129,6 +129,7 @@ class StochasticTrainer(object):
 
     def _optim(self, xys):
         idx = np.arange(len(xys))
+        pdb.set_trace();
         self.batch_size = np.ceil(len(xys) / self.nbatches)
         batch_idx = np.arange(self.batch_size, len(xys), self.batch_size)
         pdb.set_trace()
@@ -197,6 +198,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         self.model.add_hyperparam('margin', kwargs.pop('margin', _DEF_MARGIN))
 
     def fit(self, xs, ys):
+        # samplef is RandomModeSample set by setup_trainer() method
         if self.samplef is None:
             pidx = np.where(np.array(ys) == 1)[0]
             nidx = np.where(np.array(ys) != 1)[0]
@@ -219,13 +221,17 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         nxs = []
 
         for xy in xys:
+            #pdb.set_trace()
+            # samplef is RandomModeSampler
             if self.samplef is not None:
                 for nx in self.samplef([xy]):
                     pxs.append(xy)
                     nxs.append(nx)
             else:
+                pdb.set_trace()
                 pxs.append((self.pxs[xy], 1))
                 nxs.append((self.nxs[xy], 1))
+                pdb.set_trace()
 
         # take step for batch
         if hasattr(self.model, '_prepare_batch_step'):

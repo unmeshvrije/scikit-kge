@@ -136,7 +136,7 @@ class AdaGrad(ParameterUpdate):
         # idx is array of ids
         # p2[idx] will extract the vector embeddings for each id in the array idx
         self.p2[idx] += g * g
-        #pdb.set_trace();
+        pdb.set_trace();
         H = np.maximum(np.sqrt(self.p2[idx]), 1e-7)
         # Check the learning rate here
         log.info("Learning rate = [%f] | " % (self.learning_rate))
