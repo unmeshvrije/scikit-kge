@@ -128,9 +128,13 @@ class StochasticTrainer(object):
         self.loss = 0
 
     def _optim(self, xys):
+        # idx = [0,1,2,...., k] where len(xys) = k
         idx = np.arange(len(xys))
         pdb.set_trace();
         self.batch_size = np.ceil(len(xys) / self.nbatches)
+        # A-range (start, stop, jump)
+        # For batch size 10 and nbatches 100 and len(xys) = 1000
+        # batch_idx = [10,20,30,40,....100,110,....990,1000]
         batch_idx = np.arange(self.batch_size, len(xys), self.batch_size)
         pdb.set_trace()
         for self.epoch in range(1, self.max_epochs + 1):
@@ -208,6 +212,8 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             xys = list(range(min(len(pxs), len(self.nxs))))
             self._optim(xys)
         else:
+            # make a list of tuples such that every entry is the tuple of two tuples (Xs and Ys)
+            log.info("Pairwise Stochastic Trainer fit() ");
             self._optim(list(zip(xs, ys)))
 
     def _pre_epoch(self):
