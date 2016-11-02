@@ -3,7 +3,9 @@ from skge.base import Model
 from skge.util import grad_sum_matrix, unzip_triples
 from skge.param import normalize
 import pdb
-
+import logging
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger('EX-KG')
 class TransE(Model):
     """
     Translational Embeddings of Knowledge Graphs
@@ -17,6 +19,7 @@ class TransE(Model):
         self.add_hyperparam('l1', kwargs.pop('l1', True))
         self.add_param('E', (self.sz[0], self.ncomp), post=normalize)
         self.add_param('R', (self.sz[2], self.ncomp))
+        log.info("l1 is %r " % (self.l1) )
 
     def _scores(self, ss, ps, os):
         # This is the dissimilarity measure 'd' from the paper 
@@ -24,24 +27,37 @@ class TransE(Model):
         # h + l -t OR
         # subject + predicate - object
         # s + p - o
+        #pdb.set_trace()
         score = self.E[ss] + self.R[ps] - self.E[os]
         if self.l1:
+            #pdb.set_trace()
             score = np.abs(score)
+            return -np.sum(score, axis=1)
         else:
+            #pdb.set_trace()
             score = score ** 2
-        return -np.sum(score, axis=1)
+            #scoreSubjects = np.sum(self.E[ss] ** 2)
+            #scorePredicates = np.sum(self.R[ps] ** 2)
+            #scoreObjects = np.sum(self.E[os] ** 2)
+            #score = (scoreSubjects ** (1.0/2)) + (scorePredicates ** (1.0/2)) - (scoreObjects ** (1.0/2))
+            #return -score
+            # don't return negative of np.sum because we are taking square root of this later
+            return np.sum(score, axis=1)
 
     def _pairwise_gradients(self, pxs, nxs):
         # indices of positive triples
-        pdb.set_trace()
+        #pdb.set_trace()
         sp, pp, op = unzip_triples(pxs)
         # indices of negative triples
         sn, pn, on = unzip_triples(nxs)
 
         # Calculate d(h+l, t) = ||h+l-t||
+        #pdb.set_trace();
         pscores = self._scores(sp, pp, op)
         nscores = self._scores(sn, pn, on)
-        #pdb.set_trace();
+        if not self.l1:
+            pscores = np.sqrt(pscores)
+            nscores = np.sqrt(nscores)
         # ind contains all violating embeddings
         # all triplets where margin > pscores - nscores
         # i.e. pscores - nscores <= margin
@@ -52,7 +68,7 @@ class TransE(Model):
         # 2. negative sample's h in direction -X and negative sample's t in +Y
 
         ind = np.where(nscores + self.margin > pscores)[0]
-        pdb.set_trace();
+        #pdb.set_trace();
 
         # all examples in batch satify margin criterion
         self.nviolations = len(ind)
@@ -68,10 +84,10 @@ class TransE(Model):
 
         #pg = self.E[sp] + self.R[pp] - self.E[op]
         #ng = self.E[sn] + self.R[pn] - self.E[on]
-        pdb.set_trace()
+        #pdb.set_trace()
         pg = self.E[op] - self.R[pp] - self.E[sp]
         ng = self.E[on] - self.R[pn] - self.E[sn]
-        pdb.set_trace()
+        #pdb.set_trace()
 
         if self.l1:
             # This part is crucial to understand the derivatives.
@@ -85,15 +101,17 @@ class TransE(Model):
             #ng = -np.sign(-ng)
             ng = np.sign(ng)
         else:
-            # Compute L2 norm derivatives which 2x
-            pg = -pg * 2
-            ng = ng * 2
+            # Compute L2 norm derivatives which is h1/sqrt(h1^2 + h2^2 + h3^2 + ... + hn^2), where n is the number of components
+            #pdb.set_trace();
+            pg = -pg / pscores[:,None]
+            ng = ng / nscores[:,None]
             #raise NotImplementedError()
 
         # entity gradients
         # Sum of sp, op, sn, on = 4 X number of violating tuples
+        #pdb.set_trace();
         eidx, Sm, n = grad_sum_matrix(sp + op + sn + on)
-        pdb.set_trace();
+        #pdb.set_trace();
         # eidx is the array/list containing all unique entities
         # Sm has number of rows = eidx's length
 
@@ -113,7 +131,7 @@ class TransE(Model):
         update function
 
         '''
-        pdb.set_trace();
+        #pdb.set_trace();
 
         # relation gradients
         ridx, Sm, n = grad_sum_matrix(pp + pn)

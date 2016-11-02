@@ -5,6 +5,11 @@ from skge.param import Parameter, AdaGrad
 import timeit
 import pickle
 import pdb
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger('EX-KG')
+
 _cutoff = 30
 
 _DEF_NBATCHES = 100
@@ -130,13 +135,13 @@ class StochasticTrainer(object):
     def _optim(self, xys):
         # idx = [0,1,2,...., k] where len(xys) = k
         idx = np.arange(len(xys))
-        pdb.set_trace();
+        #pdb.set_trace();
         self.batch_size = np.ceil(len(xys) / self.nbatches)
         # A-range (start, stop, jump)
         # For batch size 10 and nbatches 100 and len(xys) = 1000
         # batch_idx = [10,20,30,40,....100,110,....990,1000]
         batch_idx = np.arange(self.batch_size, len(xys), self.batch_size)
-        pdb.set_trace()
+        #pdb.set_trace()
         for self.epoch in range(1, self.max_epochs + 1):
             # shuffle training examples
             self._pre_epoch()
@@ -234,10 +239,10 @@ class PairwiseStochasticTrainer(StochasticTrainer):
                     pxs.append(xy)
                     nxs.append(nx)
             else:
-                pdb.set_trace()
+                #pdb.set_trace()
                 pxs.append((self.pxs[xy], 1))
                 nxs.append((self.nxs[xy], 1))
-                pdb.set_trace()
+                #pdb.set_trace()
 
         # take step for batch
         if hasattr(self.model, '_prepare_batch_step'):
