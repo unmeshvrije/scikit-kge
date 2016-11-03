@@ -42,7 +42,7 @@ class TransE(Model):
             #score = (scoreSubjects ** (1.0/2)) + (scorePredicates ** (1.0/2)) - (scoreObjects ** (1.0/2))
             #return -score
             # don't return negative of np.sum because we are taking square root of this later
-            return np.sum(score, axis=1)
+            return -np.sum(score, axis=1)
 
     def _pairwise_gradients(self, pxs, nxs):
         # indices of positive triples
@@ -55,9 +55,11 @@ class TransE(Model):
         #pdb.set_trace();
         pscores = self._scores(sp, pp, op)
         nscores = self._scores(sn, pn, on)
-        if not self.l1:
-            pscores = np.sqrt(pscores)
-            nscores = np.sqrt(nscores)
+        
+        #if not self.l1:
+        #    pscores = pscores / 2
+        #    nscores = nscores / 2
+
         # ind contains all violating embeddings
         # all triplets where margin > pscores - nscores
         # i.e. pscores - nscores <= margin
@@ -101,10 +103,9 @@ class TransE(Model):
             #ng = -np.sign(-ng)
             ng = np.sign(ng)
         else:
-            # Compute L2 norm derivatives which is h1/sqrt(h1^2 + h2^2 + h3^2 + ... + hn^2), where n is the number of components
-            #pdb.set_trace();
-            pg = -pg / pscores[:,None]
-            ng = ng / nscores[:,None]
+            # Compute L2 norm derivatives which is (h1 + l1 - t1)
+            pg = -pg
+            ng = ng
             #raise NotImplementedError()
 
         # entity gradients
