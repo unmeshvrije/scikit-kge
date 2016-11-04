@@ -70,7 +70,7 @@ class TransE(Model):
         # 2. negative sample's h in direction -X and negative sample's t in +Y
 
         ind = np.where(nscores + self.margin > pscores)[0]
-        #pdb.set_trace();
+        pdb.set_trace();
 
         # all examples in batch satify margin criterion
         self.nviolations = len(ind)
@@ -89,7 +89,7 @@ class TransE(Model):
         #pdb.set_trace()
         pg = self.E[op] - self.R[pp] - self.E[sp]
         ng = self.E[on] - self.R[pn] - self.E[sn]
-        #pdb.set_trace()
+        pdb.set_trace()
 
         if self.l1:
             # This part is crucial to understand the derivatives.
@@ -112,11 +112,11 @@ class TransE(Model):
         # Sum of sp, op, sn, on = 4 X number of violating tuples
         #pdb.set_trace();
         eidx, Sm, n = grad_sum_matrix(sp + op + sn + on)
-        #pdb.set_trace();
+        pdb.set_trace();
         # eidx is the array/list containing all unique entities
         # Sm has number of rows = eidx's length
 
-        #dividing by n is the normalization
+        # dividing by n is the normalization
         # n contains the list of row sums of matrix Sm
         # This ensures that all values are x such that -1 <= x <=1 
         ge = Sm.dot(np.vstack((pg, -pg, ng, -ng))) / n
@@ -128,7 +128,7 @@ class TransE(Model):
 
 
         Sm.dot(G) = matrix of shape (5046 X 5) = ge
-        Here we have gradients for 5046 vectors that will be updated with AdaGrad
+        Here we have gradients for 5046 entity vectors that will be updated with AdaGrad
         update function
 
         '''
