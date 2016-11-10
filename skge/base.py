@@ -128,6 +128,11 @@ class StochasticTrainer(object):
 
     def fit(self, xs, ys):
         self._optim(list(zip(xs, ys)))
+        pdb.set_trace()
+        for c in self.model.E.updateCounters:
+            log.info ("%3d " % (c))
+        for r in self.model.R.updateCounters:
+            log.info ("%3d " % (r))
 
     def _pre_epoch(self):
         self.loss = 0

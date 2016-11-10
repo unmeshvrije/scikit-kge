@@ -67,14 +67,14 @@ def grad_sum_matrix(idx):
     array([0,1,4,3,1,2,1]) # 0 is index of 1 in the new unique array, 1 is the index of 2 and so on
     """
     uidx, iinv = np.unique(idx, return_inverse=True)
-    pdb.set_trace();
+    #pdb.set_trace();
     sz = len(iinv)
     #pdb.set_trace();
 
     # create a COOrdinate matrix and convert it to CSR (Compressed Sparse Row matrix)
     #                   data        (row, col) where row is array of row indices and col is col indices.
     M = sp.coo_matrix((np.ones(sz), (iinv, np.arange(sz)))).tocsr()
-    pdb.set_trace();
+    #pdb.set_trace();
     # CSR Matrix
     '''
     Illustration

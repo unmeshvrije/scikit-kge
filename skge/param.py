@@ -64,7 +64,6 @@ class Parameter(np.ndarray):
                 arr = np.array([Parameter._init_array(sz, args[1]) for _ in range(args[0][0])])
         else:
                 arr = Parameter._init_array(args[0], args[1])
-        #pdb.set_trace();
         arr = arr.view(cls)
         #pdb.set_trace();
         arr.name = kwargs.pop('name', None)
@@ -74,6 +73,14 @@ class Parameter(np.ndarray):
             arr = arr.post(arr)
 
         return arr
+
+    def __init__(self, *args, **kwargs):
+        # Note that this function assumes that args[0] is the shape of array
+        # And it is 2D => N X C => where N is number of entities/relations
+        # and C is number of components for vectors
+        # Create the array updates of N elements all initialized to 0
+        #pdb.set_trace();
+        self.updateCounts = [0] * args[0][0]
 
     def __array_finalize__(self, obj):
         if obj is None:
@@ -136,6 +143,9 @@ class AdaGrad(ParameterUpdate):
         # idx is array of ids
         # p2[idx] will extract the vector embeddings for each id in the array idx
         self.p2[idx] += g * g
+        #pdb.set_trace()
+        for i in idx:
+            self.param.updateCounts[i] += 1
         #pdb.set_trace();
         H = np.maximum(np.sqrt(self.p2[idx]), 1e-7)
         # Check the learning rate here

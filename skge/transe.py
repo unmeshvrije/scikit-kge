@@ -17,6 +17,7 @@ class TransE(Model):
         self.add_hyperparam('sz', args[0])
         self.add_hyperparam('ncomp', args[1])
         self.add_hyperparam('l1', kwargs.pop('l1', True))
+        #pdb.set_trace()
         self.add_param('E', (self.sz[0], self.ncomp), post=normalize)
         self.add_param('R', (self.sz[2], self.ncomp))
         log.info("l1 is %r " % (self.l1) )
@@ -70,7 +71,7 @@ class TransE(Model):
         # 2. negative sample's h in direction -X and negative sample's t in +Y
 
         ind = np.where(nscores + self.margin > pscores)[0]
-        pdb.set_trace();
+        #pdb.set_trace();
 
         # all examples in batch satify margin criterion
         self.nviolations = len(ind)
@@ -89,7 +90,7 @@ class TransE(Model):
         #pdb.set_trace()
         pg = self.E[op] - self.R[pp] - self.E[sp]
         ng = self.E[on] - self.R[pn] - self.E[sn]
-        pdb.set_trace()
+        #pdb.set_trace()
 
         if self.l1:
             # This part is crucial to understand the derivatives.
@@ -112,7 +113,7 @@ class TransE(Model):
         # Sum of sp, op, sn, on = 4 X number of violating tuples
         #pdb.set_trace();
         eidx, Sm, n = grad_sum_matrix(sp + op + sn + on)
-        pdb.set_trace();
+        #pdb.set_trace();
         # eidx is the array/list containing all unique entities
         # Sm has number of rows = eidx's length
 
