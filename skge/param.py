@@ -81,6 +81,7 @@ class Parameter(np.ndarray):
         # Create the array updates of N elements all initialized to 0
         #pdb.set_trace();
         self.updateCounts = [0] * args[0][0]
+        self.updateVectors = [[] for _ in range( args[0][0])]
 
     def __array_finalize__(self, obj):
         if obj is None:

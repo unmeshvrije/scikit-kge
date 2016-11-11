@@ -220,11 +220,16 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             # make a list of tuples such that every entry is the tuple of two tuples (Xs and Ys)
             log.info("Pairwise Stochastic Trainer fit() ");
             self._optim(list(zip(xs, ys)))
-            pdb.set_trace()
-            for c in self.model.E.updateCounts:
-                log.info ("%3d " % (c))
-            for r in self.model.R.updateCounts:
-                log.info ("%3d " % (r))
+            #pdb.set_trace()
+            index = 0
+            for ev, ec in zip(self.model.E.updateVectors, self.model.E.updateCounts):
+                log.info ("%3d ) %3d - %3d" % (xs[index][0], ec, len(ev)))
+                index += 1
+
+            index = 0
+            log.info("######### %3d entities and %3d relations #########" % (len(self.model.E.updateVectors), len(self.model.R.updateVectors)))
+            for rv, rc in zip(self.model.R.updateVectors, self.model.R.updateCounts):
+                log.info ("%3d - %3d" % (rc, len(rv)))
 
     def _pre_epoch(self):
         self.nviolations = 0
@@ -254,6 +259,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             self.model._prepare_batch_step(pxs, nxs)
         grads = self.model._pairwise_gradients(pxs, nxs)
 
+        #pdb.set_trace()
         # update if examples violate margin
         if grads is not None:
             self.nviolations += self.model.nviolations
