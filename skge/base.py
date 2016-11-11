@@ -128,11 +128,6 @@ class StochasticTrainer(object):
 
     def fit(self, xs, ys):
         self._optim(list(zip(xs, ys)))
-        pdb.set_trace()
-        for c in self.model.E.updateCounters:
-            log.info ("%3d " % (c))
-        for r in self.model.R.updateCounters:
-            log.info ("%3d " % (r))
 
     def _pre_epoch(self):
         self.loss = 0
@@ -225,6 +220,11 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             # make a list of tuples such that every entry is the tuple of two tuples (Xs and Ys)
             log.info("Pairwise Stochastic Trainer fit() ");
             self._optim(list(zip(xs, ys)))
+            pdb.set_trace()
+            for c in self.model.E.updateCounts:
+                log.info ("%3d " % (c))
+            for r in self.model.R.updateCounts:
+                log.info ("%3d " % (r))
 
     def _pre_epoch(self):
         self.nviolations = 0
