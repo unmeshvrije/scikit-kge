@@ -18,7 +18,8 @@ _DEF_LEARNING_RATE = 0.1
 _DEF_SAMPLE_FUN = None
 _DEF_MAX_EPOCHS = 1000
 _DEF_MARGIN = 1.0
-
+_FILE_GRADIENTS = 'gradients.txt'
+_FILE_EMBEDDINGS = 'embeddings.txt'
 
 class Config(object):
 
@@ -205,6 +206,12 @@ class PairwiseStochasticTrainer(StochasticTrainer):
     def __init__(self, *args, **kwargs):
         super(PairwiseStochasticTrainer, self).__init__(*args, **kwargs)
         self.model.add_hyperparam('margin', kwargs.pop('margin', _DEF_MARGIN))
+        fg = kwargs.pop('file_grad', _FILE_GRADIENTS)
+        fe = kwargs.pop('file_embed', _FILE_EMBEDDINGS)
+        if fg is not None:
+            self.file_gradients = open(fg, "w")
+        if fe is not None:
+            self.file_embeddings = open(fe, "w") 
 
     def fit(self, xs, ys):
         # samplef is RandomModeSample set by setup_trainer() method
@@ -223,7 +230,10 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             #pdb.set_trace()
             index = 0
             for ev, ec in zip(self.model.E.updateVectors, self.model.E.updateCounts):
-                log.info ("%3d ) %3d - %3d" % (xs[index][0], ec, len(ev)))
+                #log.info ("%3d ) %3d - %3d" % (xs[index][0], ec, len(ev)))
+                gradient_list = str(ev)
+                if self.file_gradients:
+                    self.file_gradients.write("[%3d] (%3d) {%s}\n" % (xs[index][0], ec, gradient_list))
                 index += 1
 
             index = 0
