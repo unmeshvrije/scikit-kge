@@ -232,12 +232,17 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             for ev, ec in zip(self.model.E.updateVectors, self.model.E.updateCounts):
                 #log.info ("%3d ) %3d - %3d" % (xs[index][0], ec, len(ev)))
                 gradient_list = str(ev)
-                if self.file_gradients:
+                if self.file_gradients is not None:
                     self.file_gradients.write("[%3d] (%3d) {%s}\n" % (xs[index][0], ec, gradient_list))
                 index += 1
 
             index = 0
             log.info("######### %3d entities and %3d relations #########" % (len(self.model.E.updateVectors), len(self.model.R.updateVectors)))
+            log.info("$$$$$$$$$ %3d entities and %3d relations $$$$$$$$$" % (len(self.model.E.shape()[0]), len(self.model.R.shape()[0])))
+            for e in self.model.E:
+                if self.file_embeddings is not None:
+                    embeddings = str(e)
+                    self.file_embeddings.write("[%3d] {%s}\n" % (xs[index][0], embeddings))
             for rv, rc in zip(self.model.R.updateVectors, self.model.R.updateCounts):
                 log.info ("%3d - %3d" % (rc, len(rv)))
 
