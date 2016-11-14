@@ -208,6 +208,8 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         self.model.add_hyperparam('margin', kwargs.pop('margin', _DEF_MARGIN))
         fg = kwargs.pop('file_grad', _FILE_GRADIENTS)
         fe = kwargs.pop('file_embed', _FILE_EMBEDDINGS)
+        self.file_gradients = None
+        self.file_embeddings = None
         if fg is not None:
             self.file_gradients = open(fg, "w")
         if fe is not None:
@@ -233,12 +235,14 @@ class PairwiseStochasticTrainer(StochasticTrainer):
                 #log.info ("%3d ) %3d - %3d" % (xs[index][0], ec, len(ev)))
                 gradient_list = str(ev)
                 if self.file_gradients is not None:
-                    self.file_gradients.write("[%3d] (%3d) {%s}\n" % (xs[index][0], ec, gradient_list))
+                    #self.file_gradients.write("[%3d] (%3d) {%s}\n" % (xs[index][0], ec, gradient_list))
+                    self.file_gradients.write("%3d,%3d\n" % (xs[index][0], ec))
                 index += 1
 
             index = 0
             log.info("######### %3d entities and %3d relations #########" % (len(self.model.E.updateVectors), len(self.model.R.updateVectors)))
-            log.info("$$$$$$$$$ %3d entities and %3d relations $$$$$$$$$" % (len(self.model.E.shape()[0]), len(self.model.R.shape()[0])))
+            pdb.set_trace()
+            log.info("$$$$$$$$$ %3d entities and %3d relations $$$$$$$$$" % (len(self.model.E), len(self.model.R)))
             for e in self.model.E:
                 if self.file_embeddings is not None:
                     embeddings = str(e)

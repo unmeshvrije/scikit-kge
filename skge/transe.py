@@ -137,8 +137,8 @@ class TransE(Model):
 
         # Add the gradient vectors to the list of all gradients for entities and relations
         # This is for instrumentation purpose.
-        for e,g in zip(eidx,ge):
-            self.E.updateVectors[e].append(g)
+        #for e,g in zip(eidx,ge):
+        #    self.E.updateVectors[e].append(g)
 
 
         # relation gradients
@@ -146,7 +146,7 @@ class TransE(Model):
         #pdb.set_trace();
         gr = Sm.dot(np.vstack((pg, ng))) / n
 
-        for r,g in zip(ridx, gr):
-            self.R.updateVectors[r].append(g)
+        #for r,g in zip(ridx, gr):
+        #    self.R.updateVectors[r].append(g)
         #pdb.set_trace();
         return {'E': (ge, eidx), 'R': (gr, ridx)}
