@@ -231,22 +231,25 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             self._optim(list(zip(xs, ys)))
             #pdb.set_trace()
             index = 0
-            for ev, ec in zip(self.model.E.updateVectors, self.model.E.updateCounts):
-                #log.info ("%3d ) %3d - %3d" % (xs[index][0], ec, len(ev)))
-                gradient_list = str(ev)
+            for ev, ec, en in zip(self.model.E.updateVectors, self.model.E.updateCounts, self.model.E.neighbours):
+                selected_list = ev[:10]
+
+                gradient_list = str(selected_list)
+
                 if self.file_gradients is not None:
                     #self.file_gradients.write("[%3d] (%3d) {%s}\n" % (xs[index][0], ec, gradient_list))
-                    self.file_gradients.write("%3d,%3d\n" % (xs[index][0], ec))
+                    self.file_gradients.write("%3d,%3d,%3d\n" % (xs[index][0], ec, en))
                 index += 1
 
             index = 0
             log.info("######### %3d entities and %3d relations #########" % (len(self.model.E.updateVectors), len(self.model.R.updateVectors)))
-            pdb.set_trace()
+            #pdb.set_trace()
             log.info("$$$$$$$$$ %3d entities and %3d relations $$$$$$$$$" % (len(self.model.E), len(self.model.R)))
             for e in self.model.E:
                 if self.file_embeddings is not None:
                     embeddings = str(e)
                     self.file_embeddings.write("[%3d] {%s}\n" % (xs[index][0], embeddings))
+                index += 1
             for rv, rc in zip(self.model.R.updateVectors, self.model.R.updateCounts):
                 log.info ("%3d - %3d" % (rc, len(rv)))
 
@@ -261,7 +264,11 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         nxs = []
 
         for xy in xys:
-            #pdb.set_trace()
+            pdb.set_trace()
+
+            # each xy is ((SUB, OBJ, PREDicate), 1)
+            self.model.E.neighbours[xy[0][0]] += 1
+            self.model.E.neighbours[xy[0][1]] += 1
             # samplef is RandomModeSampler
             if self.samplef is not None:
                 for nx in self.samplef([xy]):
