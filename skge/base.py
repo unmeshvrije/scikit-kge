@@ -231,6 +231,12 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             self._optim(list(zip(xs, ys)))
             #pdb.set_trace()
             index = 0
+
+            for x in xs:
+                # each x is (SUB, OBJ, PREDicate)
+                self.model.E.neighbours[x[0]] += 1
+                self.model.E.neighbours[x[1]] += 1
+
             for ev, ec, en in zip(self.model.E.updateVectors, self.model.E.updateCounts, self.model.E.neighbours):
                 selected_list = ev[:10]
 
@@ -266,9 +272,6 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         for xy in xys:
             #pdb.set_trace()
 
-            # each xy is ((SUB, OBJ, PREDicate), 1)
-            self.model.E.neighbours[xy[0][0]] += 1
-            self.model.E.neighbours[xy[0][1]] += 1
             # samplef is RandomModeSampler
             if self.samplef is not None:
                 for nx in self.samplef([xy]):
