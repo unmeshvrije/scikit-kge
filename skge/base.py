@@ -1,6 +1,7 @@
 from __future__ import print_function
 import argparse
 import numpy as np
+from numpy import argsort
 from numpy.random import shuffle
 from collections import defaultdict as ddict
 from skge.param import Parameter, AdaGrad
@@ -458,6 +459,9 @@ class StochasticTrainer(object):
             # process mini-batches
             for batch in np.split(idx, batch_idx):
                 # select indices for current batch
+                for z in batch:
+                    self.model.E.chosenInBatch[xys[z][0]] += 1
+                    self.model.E.chosenInBatch[xys[z][1]] += 1
                 bxys = [xys[z] for z in batch]
                 self._process_batch(bxys)
 
