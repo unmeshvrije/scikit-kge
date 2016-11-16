@@ -238,7 +238,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
 
                 if self.file_gradients is not None:
                     #self.file_gradients.write("[%3d] (%3d) {%s}\n" % (xs[index][0], ec, gradient_list))
-                    self.file_gradients.write("%3d,%3d,%3d\n" % (xs[index][0], ec, en))
+                    self.file_gradients.write("%3d,%3d,%3d\n" % (index, ec, en))
                 index += 1
 
             index = 0
@@ -248,7 +248,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             for e in self.model.E:
                 if self.file_embeddings is not None:
                     embeddings = str(e)
-                    self.file_embeddings.write("[%3d] {%s}\n" % (xs[index][0], embeddings))
+                    self.file_embeddings.write("%3d:%s\n" % (index, embeddings))
                 index += 1
             for rv, rc in zip(self.model.R.updateVectors, self.model.R.updateCounts):
                 log.info ("%3d - %3d" % (rc, len(rv)))
@@ -264,7 +264,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         nxs = []
 
         for xy in xys:
-            pdb.set_trace()
+            #pdb.set_trace()
 
             # each xy is ((SUB, OBJ, PREDicate), 1)
             self.model.E.neighbours[xy[0][0]] += 1
