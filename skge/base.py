@@ -458,11 +458,25 @@ class StochasticTrainer(object):
             #pdb.set_trace()
             # process mini-batches
             for batch in np.split(idx, batch_idx):
-                # select indices for current batch
+                
+                '''
+                xys is array of tuple pairs as follows
+                ((S1, O1, P1), 1.0 )
+                ((S2, O2, P2), 1.0 )
+                ((S3, O3, P3), 1.0 )
+                ..
+                ..
+                ((Sn, On, Pn), 1.0 )
+
+                xys[index] will access one of these pairs.
+                xys[index][0] will access the triplet.
+                xys[index][0][0] will access the subject entity.
+                '''
                 for z in batch:
-                    self.model.E.chosenInBatch[xys[z][0]] += 1
-                    self.model.E.chosenInBatch[xys[z][1]] += 1
+                    self.model.E.chosenInBatch[xys[z][0][0]] += 1
+                    self.model.E.chosenInBatch[xys[z][0][1]] += 1
                 bxys = [xys[z] for z in batch]
+                # select indices for current batch
                 self._process_batch(bxys)
 
             # check callback function, if false return
@@ -534,30 +548,25 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             self._optim(xys)
         else:
             # make a list of tuples such that every entry is the tuple of two tuples (Xs and Ys)
-            log.info("Pairwise Stochastic Trainer fit() ");
+            log.info("Pairwise Stochastic Trainer fit() ")
             self._optim(list(zip(xs, ys)))
             #pdb.set_trace()
-            index = 0
 
+            log.info("len(Xs) = %6d"% (len(xs)) )
             for x in xs:
                 # each x is (SUB, OBJ, PREDicate)
                 self.model.E.neighbours[x[0]] += 1
                 self.model.E.neighbours[x[1]] += 1
 
-            for ev, ec, en in zip(self.model.E.updateVectors, self.model.E.updateCounts, self.model.E.neighbours):
-                selected_list = ev[:10]
-
-                gradient_list = str(selected_list)
-
-                if self.file_gradients is not None:
-                    #self.file_gradients.write("[%3d] (%3d) {%s}\n" % (xs[index][0], ec, gradient_list))
-                    self.file_gradients.write("%3d,%3d,%3d\n" % (index, ec, en))
-                index += 1
+            #pdb.set_trace()
+            index = 0
+            if self.file_gradients is not None:
+                self.file_gradients.write("Entity,Degree,#(chosen-in-batches),#(violations),#(updates)\n")
+                for en, eb, ev, ec in zip(self.model.E.neighbours, self.model.E.chosenInBatch, self.model.E.violations, self.model.E.updateCounts):
+                    self.file_gradients.write("%6d,%6d,%6d,%6d,%6d\n" % (index, en, eb, ev, ec))
+                    index += 1
 
             index = 0
-            log.info("######### %3d entities and %3d relations #########" % (len(self.model.E.updateVectors), len(self.model.R.updateVectors)))
-            #pdb.set_trace()
-            log.info("$$$$$$$$$ %3d entities and %3d relations $$$$$$$$$" % (len(self.model.E), len(self.model.R)))
             for e in self.model.E:
                 if self.file_embeddings is not None:
                     embeddings = str(e)

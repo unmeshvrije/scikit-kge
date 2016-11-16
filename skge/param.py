@@ -81,6 +81,8 @@ class Parameter(np.ndarray):
         # Create the array updates of N elements all initialized to 0
         #pdb.set_trace();
         self.updateCounts = [0] * args[0][0]
+        self.chosenInBatch = [0] * args[0][0]
+        self.violations = [0] * args[0][0]
         self.neighbours = [0] * args[0][0]
         self.updateVectors = [[] for _ in range( args[0][0])]
 

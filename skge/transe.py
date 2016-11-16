@@ -73,6 +73,13 @@ class TransE(Model):
         ind = np.where(nscores + self.margin > pscores)[0]
         #pdb.set_trace();
 
+        # Increase violation count for entities involved in a negative tuple
+        # and in a positive tuple
+        for i in ind:
+            unique_entities = list(set([sn[i], on[i], sp[i], op[i]]))
+            for u in unique_entities:
+                self.E.violations[u] += 1
+            
         # all examples in batch satify margin criterion
         self.nviolations = len(ind)
         if len(ind) == 0:

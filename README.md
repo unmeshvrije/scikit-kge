@@ -1,3 +1,8 @@
+### How to run
+
+```bash
+python skge/run_transe.py --fin data/wn18.bin --test-all 50 --nb 100 --me 500 --margin 2.0 --lr 0.1 --ncomp 50 --fgrad numbers.txt
+
 # Knowledge Graph Embeddings
 
 scikit-kge is a Python library to compute embeddings of knowledge graphs. The
