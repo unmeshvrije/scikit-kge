@@ -472,10 +472,10 @@ class StochasticTrainer(object):
                 xys[index][0] will access the triplet.
                 xys[index][0][0] will access the subject entity.
                 '''
-                for z in batch:
-                    self.model.E.chosenInBatch[xys[z][0][0]] += 1
-                    self.model.E.chosenInBatch[xys[z][0][1]] += 1
                 bxys = [xys[z] for z in batch]
+                for b in bxys:
+                    self.model.E.chosenInBatch[b[0][0]] += 1
+                    self.model.E.chosenInBatch[b[0][1]] += 1
                 # select indices for current batch
                 self._process_batch(bxys)
 
@@ -563,7 +563,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             if self.file_gradients is not None:
                 self.file_gradients.write("Entity,Degree,#(chosen-in-batches),#(violations),#(updates)\n")
                 for en, eb, ev, ec in zip(self.model.E.neighbours, self.model.E.chosenInBatch, self.model.E.violations, self.model.E.updateCounts):
-                    self.file_gradients.write("%6d,%6d,%6d,%6d,%6d\n" % (index, en, eb, ev, ec))
+                    self.file_gradients.write("%d,%d,%d,%d,%d\n" % (index, en, eb, ev, ec))
                     index += 1
 
             index = 0
@@ -573,7 +573,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
                     self.file_embeddings.write("%3d:%s\n" % (index, embeddings))
                 index += 1
             for rv, rc in zip(self.model.R.updateVectors, self.model.R.updateCounts):
-                log.info ("%3d - %3d" % (rc, len(rv)))
+                log.info ("%d - %d" % (rc, len(rv)))
 
     def _pre_epoch(self):
         self.nviolations = 0
