@@ -455,8 +455,11 @@ class StochasticTrainer(object):
             # store epoch for callback
             self.epoch_start = timeit.default_timer()
 
-            #pdb.set_trace()
             # process mini-batches
+            # Split the array idx by indexes given in batch_idx
+            # batch_idx contains [1414, 2828, 4242, 5656, 7070,...]
+            # Thus, batch will contain array of 1414 elements each time
+            # entities with ids 0-1413, 1414-2827, 2828-4241 etc.
             for batch in np.split(idx, batch_idx):
                 
                 '''
@@ -473,10 +476,6 @@ class StochasticTrainer(object):
                 xys[index][0][0] will access the subject entity.
                 '''
                 bxys = [xys[z] for z in batch]
-                for b in bxys:
-                    self.model.E.chosenInBatch[b[0][0]] += 1
-                    self.model.E.chosenInBatch[b[0][1]] += 1
-                # select indices for current batch
                 self._process_batch(bxys)
 
             # check callback function, if false return
@@ -562,8 +561,8 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             index = 0
             if self.file_gradients is not None:
                 self.file_gradients.write("Entity,Degree,#(chosen-in-batches),#(violations),#(updates)\n")
-                for en, eb, ev, ec in zip(self.model.E.neighbours, self.model.E.chosenInBatch, self.model.E.violations, self.model.E.updateCounts):
-                    self.file_gradients.write("%d,%d,%d,%d,%d\n" % (index, en, eb, ev, ec))
+                for en, eb, ev, ec in zip(self.model.E.neighbours, self.model.E.violations, self.model.E.updateCounts):
+                    self.file_gradients.write("%d,%d,%d,%d,%d\n" % (index, en, ev, ec))
                     index += 1
 
             index = 0
