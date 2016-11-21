@@ -45,6 +45,7 @@ class Experiment(object):
         self.parser.add_argument('--fin', type=str, help='Path to input data', default=None)
         self.parser.add_argument('--test-all', type=int, help='Evaluate Test set after x epochs', default=10)
         self.parser.add_argument('--no-pairwise', action='store_const', default=False, const=True)
+        self.parser.add_argument('--incr', action='store_const', default=False, const=True)
         self.parser.add_argument('--mode', type=str, default='rank')
         self.parser.add_argument('--sampler', type=str, default='random-mode')
         self.parser.add_argument('--norm', type=str, default='l1', help=' Normalization (l1(default) or l2)')
@@ -130,6 +131,16 @@ class Experiment(object):
                         pickle.dump(st, fout, protocol=2)
         return True
 
+    def bisect_list_by_percent(self, ll, percentage):
+        size = len(ll)
+        shuffle(ll)
+        pdb.set_trace()
+        first_half_len = (size * percentage) / 100
+        second_half_len = size - first_half_len
+        first_half = ll[:first_half_len]
+        second_half = ll[first_half_len:]
+        return [first_half, second_half]
+
     def train(self):
         # read data
         with open(self.args.fin, 'rb') as fin:
@@ -148,9 +159,6 @@ class Experiment(object):
             self.ev_test = self.evaluator(data['test_subs'], data['test_labels'])
             self.ev_valid = self.evaluator(data['valid_subs'], data['valid_labels'])
 
-        xs = data['train_subs']
-        ys = np.ones(len(xs))
-
         # create sampling objects
         if self.args.sampler == 'corrupted':
             # create type index, here it is ok to use the whole data
@@ -161,15 +169,45 @@ class Experiment(object):
             sampler = sample.LCWASampler(self.args.ne, [0, 1, 2], xs, sz)
         else:
             raise ValueError('Unknown sampler (%s)' % self.args.sampler)
-
+        # setup trainer
         trn = self.setup_trainer(sz, sampler)
         log.info("Fitting model %s with trainer %s and parameters %s" % (
             trn.model.__class__.__name__,
             trn.__class__.__name__,
             self.args)
         )
-        trn.fit(xs, ys)
-        self.callback(trn, with_eval=True)
+
+        if self.args.incr:
+
+            # Select 10% of the tuples here
+            triples = data['train_subs']
+            incremental_batches = self.bisect_list_by_percent(triples, 10)
+            log.info("total size = %d, 10%% size = %d, 90%% size = %d" % (len(data['train_subs'], len(incremental_batches[0]), len(incremental_batches[1]))))
+
+            xs = incremental_batches[0]
+            ys = np.ones(len(xs))
+
+            trn.fit(xs, ys)
+            self.callback(trn, with_eval=True)
+            pdb.set_trace()
+
+            # Select all tuples
+            log.info("First batch finished : ######################")
+            xs = incremental_batches[0] + incremental_batches[1]
+            ys = np.ones(len(xs))
+
+            trn.fit(xs, ys)
+            self.callback(trn, with_eval=True)
+
+            # After this step, we would like to know which entities got better embeddings
+            # And then train again
+        else:
+            xs = data['train_subs']
+            ys = np.ones(len(xs))
+
+            trn.fit(xs, ys)
+            self.callback(trn, with_eval=True)
+
 
 
 class FilteredRankingEval(object):
