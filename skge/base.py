@@ -641,10 +641,8 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             for e in self.model.E:
                 if self.file_embeddings is not None:
                     embeddings = str(e)
-                    self.file_embeddings.write("%3d:%s\n" % (index, embeddings))
+                    self.file_embeddings.write("%3d,%s\n" % (index, embeddings))
                 index += 1
-            for rv, rc in zip(self.model.R.updateVectors, self.model.R.updateCounts):
-                log.info ("%d - %d" % (rc, len(rv)))
 
     def _pre_epoch(self):
         self.nviolations = 0
