@@ -134,7 +134,6 @@ class Experiment(object):
     def bisect_list_by_percent(self, ll, percentage):
         size = len(ll)
         shuffle(ll)
-        pdb.set_trace()
         first_half_len = (size * percentage) / 100
         second_half_len = size - first_half_len
         first_half = ll[:first_half_len]
@@ -159,43 +158,61 @@ class Experiment(object):
             self.ev_test = self.evaluator(data['test_subs'], data['test_labels'])
             self.ev_valid = self.evaluator(data['valid_subs'], data['valid_labels'])
 
-        # create sampling objects
-        if self.args.sampler == 'corrupted':
-            # create type index, here it is ok to use the whole data
-            sampler = sample.CorruptedSampler(self.args.ne, xs, ti)
-        elif self.args.sampler == 'random-mode':
-            sampler = sample.RandomModeSampler(self.args.ne, [0, 1], xs, sz)
-        elif self.args.sampler == 'lcwa':
-            sampler = sample.LCWASampler(self.args.ne, [0, 1, 2], xs, sz)
-        else:
-            raise ValueError('Unknown sampler (%s)' % self.args.sampler)
-        # setup trainer
-        trn = self.setup_trainer(sz, sampler)
-        log.info("Fitting model %s with trainer %s and parameters %s" % (
-            trn.model.__class__.__name__,
-            trn.__class__.__name__,
-            self.args)
-        )
 
         if self.args.incr:
 
             # Select 10% of the tuples here
             triples = data['train_subs']
             incremental_batches = self.bisect_list_by_percent(triples, 10)
-            log.info("total size = %d, 10%% size = %d, 90%% size = %d" % (len(data['train_subs'], len(incremental_batches[0]), len(incremental_batches[1]))))
+            log.info("total size = %d, 10%% size = %d, 90%% size = %d" % (len(data['train_subs']), len(incremental_batches[0]), len(incremental_batches[1])))
 
             xs = incremental_batches[0]
             ys = np.ones(len(xs))
 
+            # create sampling objects
+            if self.args.sampler == 'corrupted':
+                # create type index, here it is ok to use the whole data
+                sampler = sample.CorruptedSampler(self.args.ne, xs, ti)
+            elif self.args.sampler == 'random-mode':
+                sampler = sample.RandomModeSampler(self.args.ne, [0, 1], xs, sz)
+            elif self.args.sampler == 'lcwa':
+                sampler = sample.LCWASampler(self.args.ne, [0, 1, 2], xs, sz)
+            else:
+                raise ValueError('Unknown sampler (%s)' % self.args.sampler)
+            # setup trainer
+            trn = self.setup_trainer(sz, sampler)
+            log.info("Fitting model %s with trainer %s and parameters %s" % (
+                trn.model.__class__.__name__,
+                trn.__class__.__name__,
+                self.args)
+            )
             trn.fit(xs, ys)
             self.callback(trn, with_eval=True)
-            pdb.set_trace()
 
             # Select all tuples
             log.info("First batch finished : ######################")
             xs = incremental_batches[0] + incremental_batches[1]
             ys = np.ones(len(xs))
 
+            # create sampling objects
+            if self.args.sampler == 'corrupted':
+                # create type index, here it is ok to use the whole data
+                sampler = sample.CorruptedSampler(self.args.ne, xs, ti)
+            elif self.args.sampler == 'random-mode':
+                sampler = sample.RandomModeSampler(self.args.ne, [0, 1], xs, sz)
+            elif self.args.sampler == 'lcwa':
+                sampler = sample.LCWASampler(self.args.ne, [0, 1, 2], xs, sz)
+            else:
+                raise ValueError('Unknown sampler (%s)' % self.args.sampler)
+            
+            # Don't setup trainer again
+            #trn = self.setup_trainer(sz, sampler)
+             
+            log.info("Fitting model %s with trainer %s and parameters %s" % (
+                trn.model.__class__.__name__,
+                trn.__class__.__name__,
+                self.args)
+            )
             trn.fit(xs, ys)
             self.callback(trn, with_eval=True)
 
@@ -205,6 +222,23 @@ class Experiment(object):
             xs = data['train_subs']
             ys = np.ones(len(xs))
 
+            # create sampling objects
+            if self.args.sampler == 'corrupted':
+                # create type index, here it is ok to use the whole data
+                sampler = sample.CorruptedSampler(self.args.ne, xs, ti)
+            elif self.args.sampler == 'random-mode':
+                sampler = sample.RandomModeSampler(self.args.ne, [0, 1], xs, sz)
+            elif self.args.sampler == 'lcwa':
+                sampler = sample.LCWASampler(self.args.ne, [0, 1, 2], xs, sz)
+            else:
+                raise ValueError('Unknown sampler (%s)' % self.args.sampler)
+            # setup trainer
+            trn = self.setup_trainer(sz, sampler)
+            log.info("Fitting model %s with trainer %s and parameters %s" % (
+                trn.model.__class__.__name__,
+                trn.__class__.__name__,
+                self.args)
+            )
             trn.fit(xs, ys)
             self.callback(trn, with_eval=True)
 
@@ -598,9 +632,9 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             #pdb.set_trace()
             index = 0
             if self.file_gradients is not None:
-                self.file_gradients.write("Entity,Degree,#(chosen-in-batches),#(violations),#(updates)\n")
-                for en, eb, ev, ec in zip(self.model.E.neighbours, self.model.E.violations, self.model.E.updateCounts):
-                    self.file_gradients.write("%d,%d,%d,%d,%d\n" % (index, en, ev, ec))
+                self.file_gradients.write("Entity,Degree,#(violations),#(updates)\n")
+                for en, ev, ec in zip(self.model.E.neighbours, self.model.E.violations, self.model.E.updateCounts):
+                    self.file_gradients.write("%d,%d,%d,%d\n" % (index, en, ev, ec))
                     index += 1
 
             index = 0
