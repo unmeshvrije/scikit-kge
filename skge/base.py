@@ -45,7 +45,7 @@ class Experiment(object):
         self.parser.add_argument('--fin', type=str, help='Path to input data', default=None)
         self.parser.add_argument('--test-all', type=int, help='Evaluate Test set after x epochs', default=10)
         self.parser.add_argument('--no-pairwise', action='store_const', default=False, const=True)
-        self.parser.add_argument('--incr', action='store_const', default=False, const=True)
+        self.parser.add_argument('--incr', type=int, help='Percentage of training data to consider in first step', default=100)
         self.parser.add_argument('--mode', type=str, default='rank')
         self.parser.add_argument('--sampler', type=str, default='random-mode')
         self.parser.add_argument('--norm', type=str, default='l1', help=' Normalization (l1(default) or l2)')
@@ -159,12 +159,12 @@ class Experiment(object):
             self.ev_valid = self.evaluator(data['valid_subs'], data['valid_labels'])
 
 
-        if self.args.incr:
+        if self.args.incr != 100:
 
             # Select 10% of the tuples here
             triples = data['train_subs']
-            incremental_batches = self.bisect_list_by_percent(triples, 10)
-            log.info("total size = %d, 10%% size = %d, 90%% size = %d" % (len(data['train_subs']), len(incremental_batches[0]), len(incremental_batches[1])))
+            incremental_batches = self.bisect_list_by_percent(triples, self.args.incr)
+            log.info("total size = %d, %d%% size = %d, %d%% size = %d" % (len(data['train_subs']), self.args.incr, len(incremental_batches[0]), 100-self.args.incr, len(incremental_batches[1])))
 
             xs = incremental_batches[0]
             ys = np.ones(len(xs))
@@ -189,8 +189,15 @@ class Experiment(object):
             trn.fit(xs, ys)
             self.callback(trn, with_eval=True)
 
+            log.info("First step finished : ######################")
+            notUpdated = 0
+            for count in enumerate(trn.model.E.updateCounts):
+                if count == 0:
+                    notUpdated += 1
+
+            log.info("!!!!!!!!!!! %d entities not updated. !!!!!!!!!!!!!!" % (notUpdated))
+            
             # Select all tuples
-            log.info("First batch finished : ######################")
             xs = incremental_batches[0] + incremental_batches[1]
             ys = np.ones(len(xs))
 
