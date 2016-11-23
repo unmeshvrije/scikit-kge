@@ -189,14 +189,23 @@ class Experiment(object):
             trn.fit(xs, ys)
             self.callback(trn, with_eval=True)
 
+            countEntities = [0] * N
+            for x in xs:
+                countEntities[x[0]] += 1
+                countEntities[x[1]] += 1
+
             log.info("First step finished : ######################")
             notUpdated = 0
-            for count in enumerate(trn.model.E.updateCounts):
+            for count in trn.model.E.updateCounts:
                 if count == 0:
                     notUpdated += 1
+            log.info("!!!!!!!!!!! According to instrumentation, %d entities not updated. !!!!!!!!!!!!!!" % (notUpdated))
 
-            log.info("!!!!!!!!!!! %d entities not updated. !!!!!!!!!!!!!!" % (notUpdated))
-            
+            notConsidered = 0;
+            for count in countEntities:
+                if count == 0:
+                    notConsidered += 1
+            log.info("!!!!!!!!!!! According to Array xs, %d entities not considered. !!!!!!!!!!!!!!" % (notConsidered))
             # Select all tuples
             xs = incremental_batches[0] + incremental_batches[1]
             ys = np.ones(len(xs))
