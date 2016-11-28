@@ -77,8 +77,12 @@ class Experiment(object):
 
         # if we improved the validation error, store model and calc test error
         if (trn.epoch % self.args.test_all == 0) or with_eval:
+            log.info("Computing positions and scores...")
+            start = timeit.default_timer()
             pos_v, fpos_v = self.ev_valid.positions(trn.model)
             fmrr_valid = ranking_scores(pos_v, fpos_v, trn.epoch, 'VALID')
+            end = timeit.default_timer()
+            log.info("%ds spent in computing positions and scores." % (end - start))
 
             log.debug("FMRR valid = %f, best = %f" % (fmrr_valid, self.best_valid_score))
             if fmrr_valid > self.best_valid_score:
@@ -140,6 +144,51 @@ class Experiment(object):
         second_half = ll[first_half_len:]
         return [first_half, second_half]
 
+    def fit_model(self, xs, ys, sz, setup_trainer=True, trainer=None):
+        # create sampling objects
+        if self.args.sampler == 'corrupted':
+            # create type index, here it is ok to use the whole data
+            sampler = sample.CorruptedSampler(self.args.ne, xs, ti)
+        elif self.args.sampler == 'random-mode':
+            sampler = sample.RandomModeSampler(self.args.ne, [0, 1], xs, sz)
+        elif self.args.sampler == 'lcwa':
+            sampler = sample.LCWASampler(self.args.ne, [0, 1, 2], xs, sz)
+        else:
+            raise ValueError('Unknown sampler (%s)' % self.args.sampler)
+
+        if setup_trainer:
+            trn = self.setup_trainer(sz, sampler)
+        else:
+            trn = trainer
+
+        notUpdated = 0
+        for count in trn.model.E.updateCounts:
+            if count == 0:
+                notUpdated += 1
+        log.info("%%%% Before fitting, According to instrumentation, %d entities not updated. !!!!!!!!!!!!!!" % (notUpdated))
+        log.info("Fitting model %s with trainer %s and parameters %s" % (
+            trn.model.__class__.__name__,
+            trn.__class__.__name__,
+            self.args)
+        )
+        trn.fit(xs, ys)
+        self.callback(trn, with_eval=True)
+        return trn
+
+    def make_graph(triples, N, M):
+        graph_outgoing = [ddict(list) for _ in range(N)]
+        graph_incoming = [ddict(list) for _ in range(N)]
+        graph_relations = [ddict(list)for _ in range(M)]
+        graph_relations_rev = [ddict(list)for _ in range(M)]
+        for t in triples:
+            head = t[0]
+            tail = t[1]
+            relation = t[2]
+            graph_outgoing[head][relation].append(tail)
+            graph_incoming[tail][relation].append(head)
+            graph_relations[relations][head].append(tail)
+            graph_relations_rev[relations][tail].append(head)
+
     def train(self):
         # read data
         with open(self.args.fin, 'rb') as fin:
@@ -158,36 +207,29 @@ class Experiment(object):
             self.ev_test = self.evaluator(data['test_subs'], data['test_labels'])
             self.ev_valid = self.evaluator(data['valid_subs'], data['valid_labels'])
 
+        # Make a graph from edges in training triples.
+        #graph = self.make_graph(data['train_subs'])
 
         if self.args.incr != 100:
 
             # Select 10% of the tuples here
+
+            time_start = timeit.default_timer()
             triples = data['train_subs']
             incremental_batches = self.bisect_list_by_percent(triples, self.args.incr)
+            time_end = timeit.default_timer()
+            log.info("time to choose %d%% samples = %ds" % (self.args.incr, time_end-time_start))
+
             log.info("total size = %d, %d%% size = %d, %d%% size = %d" % (len(data['train_subs']), self.args.incr, len(incremental_batches[0]), 100-self.args.incr, len(incremental_batches[1])))
 
             xs = incremental_batches[0]
             ys = np.ones(len(xs))
 
-            # create sampling objects
-            if self.args.sampler == 'corrupted':
-                # create type index, here it is ok to use the whole data
-                sampler = sample.CorruptedSampler(self.args.ne, xs, ti)
-            elif self.args.sampler == 'random-mode':
-                sampler = sample.RandomModeSampler(self.args.ne, [0, 1], xs, sz)
-            elif self.args.sampler == 'lcwa':
-                sampler = sample.LCWASampler(self.args.ne, [0, 1, 2], xs, sz)
-            else:
-                raise ValueError('Unknown sampler (%s)' % self.args.sampler)
-            # setup trainer
-            trn = self.setup_trainer(sz, sampler)
-            log.info("Fitting model %s with trainer %s and parameters %s" % (
-                trn.model.__class__.__name__,
-                trn.__class__.__name__,
-                self.args)
-            )
-            trn.fit(xs, ys)
-            self.callback(trn, with_eval=True)
+            time_start = timeit.default_timer()
+            trainer = self.fit_model(xs, ys, sz)
+            time_end = timeit.default_timer()
+
+            log.info("Time to fit model for %d%% samples = %ds" % (self.args.incr, time_end - time_start))
 
             countEntities = [0] * N
             for x in xs:
@@ -196,9 +238,16 @@ class Experiment(object):
 
             log.info("First step finished : ######################")
             notUpdated = 0
-            for count in trn.model.E.updateCounts:
+            for index, count in enumerate(trainer.model.E.updateCounts):
                 if count == 0:
+                    log.info("%d was not updated:\n" % (index))
+                    if not any(row[0] == index for row in xs) and not any(row[1] == index for row in xs):
+                        log.info("%d does not appear in xs" % (index))
                     notUpdated += 1
+                else :
+                    if not any(row[0] == index for row in xs) and not any(row[1] == index for row in xs):
+                        log.info("%d got updated and STILL does not appear in xs" % (index))
+
             log.info("!!!!!!!!!!! According to instrumentation, %d entities not updated. !!!!!!!!!!!!!!" % (notUpdated))
 
             notConsidered = 0;
@@ -206,57 +255,19 @@ class Experiment(object):
                 if count == 0:
                     notConsidered += 1
             log.info("!!!!!!!!!!! According to Array xs, %d entities not considered. !!!!!!!!!!!!!!" % (notConsidered))
+
             # Select all tuples
             xs = incremental_batches[0] + incremental_batches[1]
             ys = np.ones(len(xs))
 
-            # create sampling objects
-            if self.args.sampler == 'corrupted':
-                # create type index, here it is ok to use the whole data
-                sampler = sample.CorruptedSampler(self.args.ne, xs, ti)
-            elif self.args.sampler == 'random-mode':
-                sampler = sample.RandomModeSampler(self.args.ne, [0, 1], xs, sz)
-            elif self.args.sampler == 'lcwa':
-                sampler = sample.LCWASampler(self.args.ne, [0, 1, 2], xs, sz)
-            else:
-                raise ValueError('Unknown sampler (%s)' % self.args.sampler)
-            
-            # Don't setup trainer again
-            #trn = self.setup_trainer(sz, sampler)
-             
-            log.info("Fitting model %s with trainer %s and parameters %s" % (
-                trn.model.__class__.__name__,
-                trn.__class__.__name__,
-                self.args)
-            )
-            trn.fit(xs, ys)
-            self.callback(trn, with_eval=True)
-
-            # After this step, we would like to know which entities got better embeddings
-            # And then train again
+            time_start= timeit.default_timer()
+            self.fit_model(xs, ys, sz, setup_trainer=False, trainer=trainer)
+            time_end = timeit.default_timer()
+            log.info("Time to fit model for 100%% samples = %ds" % (time_end - time_start))
         else:
             xs = data['train_subs']
             ys = np.ones(len(xs))
-
-            # create sampling objects
-            if self.args.sampler == 'corrupted':
-                # create type index, here it is ok to use the whole data
-                sampler = sample.CorruptedSampler(self.args.ne, xs, ti)
-            elif self.args.sampler == 'random-mode':
-                sampler = sample.RandomModeSampler(self.args.ne, [0, 1], xs, sz)
-            elif self.args.sampler == 'lcwa':
-                sampler = sample.LCWASampler(self.args.ne, [0, 1, 2], xs, sz)
-            else:
-                raise ValueError('Unknown sampler (%s)' % self.args.sampler)
-            # setup trainer
-            trn = self.setup_trainer(sz, sampler)
-            log.info("Fitting model %s with trainer %s and parameters %s" % (
-                trn.model.__class__.__name__,
-                trn.__class__.__name__,
-                self.args)
-            )
-            trn.fit(xs, ys)
-            self.callback(trn, with_eval=True)
+            self.fit_model(xs, ys, sz)
 
 
 
@@ -567,6 +578,8 @@ class StochasticTrainer(object):
                 self._process_batch(bxys)
 
             # check callback function, if false return
+            # post_epoch is the self.callback. It was set in setup_trainer() method
+            # of TransEExp
             for f in self.post_epoch:
                 if not f(self):
                     break
@@ -639,7 +652,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             self._optim(list(zip(xs, ys)))
             #pdb.set_trace()
 
-            log.info("len(Xs) = %6d"% (len(xs)) )
+            log.info("len(Xs) = %d"% (len(xs)) )
             for x in xs:
                 # each x is (SUB, OBJ, PREDicate)
                 self.model.E.neighbours[x[0]] += 1
@@ -657,7 +670,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             for e in self.model.E:
                 if self.file_embeddings is not None:
                     embeddings = str(e)
-                    self.file_embeddings.write("%3d,%s\n" % (index, embeddings))
+                    self.file_embeddings.write("%d,%s\n" % (index, embeddings))
                 index += 1
 
     def _pre_epoch(self):
@@ -671,7 +684,6 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         nxs = []
 
         for xy in xys:
-            #pdb.set_trace()
 
             # samplef is RandomModeSampler
             if self.samplef is not None:
@@ -679,14 +691,13 @@ class PairwiseStochasticTrainer(StochasticTrainer):
                     pxs.append(xy)
                     nxs.append(nx)
             else:
-                #pdb.set_trace()
                 pxs.append((self.pxs[xy], 1))
                 nxs.append((self.nxs[xy], 1))
-                #pdb.set_trace()
 
         # take step for batch
         if hasattr(self.model, '_prepare_batch_step'):
             self.model._prepare_batch_step(pxs, nxs)
+        #pdb.set_trace()
         grads = self.model._pairwise_gradients(pxs, nxs)
 
         #pdb.set_trace()
