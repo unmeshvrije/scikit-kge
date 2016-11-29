@@ -694,6 +694,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             # samplef is RandomModeSampler
             pdb.set_trace()
             if self.samplef is not None:
+                # Change head or tail of the tuple (H, T, R)
                 for nx in self.samplef([xy]):
                     pdb.set_trace()
                     pxs.append(xy)

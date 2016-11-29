@@ -51,6 +51,7 @@ class RandomSampler(Sampler):
 
     def __init__(self, n, xs, sz):
         super(RandomSampler, self).__init__(n)
+        pdb.set_trace()
         self.xs = set(xs)
         self.sz = sz
 
