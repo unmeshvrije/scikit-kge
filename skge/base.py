@@ -172,7 +172,8 @@ class Experiment(object):
             self.args)
         )
         trn.fit(xs, ys)
-        self.callback(trn, with_eval=True)
+        # TODO: Make eval true
+        self.callback(trn, with_eval=False)
         return trn
 
     def make_graph(triples, N, M):
@@ -225,12 +226,12 @@ class Experiment(object):
             xs = incremental_batches[0]
             ys = np.ones(len(xs))
 
+            pdb.set_trace()
             time_start = timeit.default_timer()
             trainer = self.fit_model(xs, ys, sz)
             time_end = timeit.default_timer()
 
             log.info("Time to fit model for %d%% samples = %ds" % (self.args.incr, time_end - time_start))
-
             countEntities = [0] * N
             for x in xs:
                 countEntities[x[0]] += 1
@@ -240,13 +241,17 @@ class Experiment(object):
             notUpdated = 0
             for index, count in enumerate(trainer.model.E.updateCounts):
                 if count == 0:
-                    log.info("%d was not updated:\n" % (index))
-                    if not any(row[0] == index for row in xs) and not any(row[1] == index for row in xs):
-                        log.info("%d does not appear in xs" % (index))
+                    #log.info("%d was not updated:\n" % (index))
+                    #if not any(row[0] == index for row in xs) and not any(row[1] == index for row in xs):
+                    #    log.info("%d does not appear in xs" % (index))
                     notUpdated += 1
                 else :
                     if not any(row[0] == index for row in xs) and not any(row[1] == index for row in xs):
+                        pdb.set_trace()
                         log.info("%d got updated and STILL does not appear in xs" % (index))
+                    else :
+                        pdb.set_trace()
+                        log.info("%d got updated and appeared in xs" % (index))
 
             log.info("!!!!!!!!!!! According to instrumentation, %d entities not updated. !!!!!!!!!!!!!!" % (notUpdated))
 
@@ -580,6 +585,7 @@ class StochasticTrainer(object):
             # check callback function, if false return
             # post_epoch is the self.callback. It was set in setup_trainer() method
             # of TransEExp
+            
             for f in self.post_epoch:
                 if not f(self):
                     break
@@ -686,8 +692,10 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         for xy in xys:
 
             # samplef is RandomModeSampler
+            pdb.set_trace()
             if self.samplef is not None:
                 for nx in self.samplef([xy]):
+                    pdb.set_trace()
                     pxs.append(xy)
                     nxs.append(nx)
             else:

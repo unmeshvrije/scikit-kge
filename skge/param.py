@@ -113,7 +113,6 @@ class ParameterUpdate(object):
 
     # This allows class's instance to be called as a function
     def __call__(self, gradient, idx=None):
-        #pdb.set_trace();
         self._update(gradient, idx)
         if self.param.post is not None:
             self.param = self.param.post(self.param, idx)

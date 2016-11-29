@@ -75,13 +75,18 @@ class TransE(Model):
 
         # Increase violation count for entities involved in a negative tuple
         # and in a positive tuple
+        list_should_be_updated = set()
         for i in ind:
             unique_entities = list(set([sn[i], on[i], sp[i], op[i]]))
             for u in unique_entities:
                 self.E.violations[u] += 1
+                list_should_be_updated.add(u)
             
-        # all examples in batch satify margin criterion
         self.nviolations = len(ind)
+
+        #num_should_be_updated = len(list_should_be_updated)
+        #pdb.set_trace()
+        # all examples in batch satify margin criterion
         if len(ind) == 0:
             return
 
@@ -115,6 +120,7 @@ class TransE(Model):
             pg = -pg
             ng = ng
             #raise NotImplementedError()
+
 
         # entity gradients
         # Sum of sp, op, sn, on = 4 X number of violating tuples
