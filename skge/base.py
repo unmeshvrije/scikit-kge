@@ -687,6 +687,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
 
             # samplef is RandomModeSampler
             if self.samplef is not None:
+                # Change head or tail of the tuple (H, T, R)
                 for nx in self.samplef([xy]):
                     pxs.append(xy)
                     nxs.append(nx)
