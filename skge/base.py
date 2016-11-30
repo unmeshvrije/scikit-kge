@@ -77,18 +77,23 @@ class Experiment(object):
 
         # if we improved the validation error, store model and calc test error
         if (trn.epoch % self.args.test_all == 0) or with_eval:
-            log.info("Computing positions and scores...")
-            start = timeit.default_timer()
+            log.info("Computing positions and scores for VALIDATION dataset...")
+            time_start = timeit.default_timer()
             pos_v, fpos_v = self.ev_valid.positions(trn.model)
             fmrr_valid = ranking_scores(pos_v, fpos_v, trn.epoch, 'VALID')
-            end = timeit.default_timer()
-            log.info("%ds spent in computing positions and scores." % (end - start))
+            time_end = timeit.default_timer()
+            log.info("%ds spent in computing positions and scores for VALIDATION dataset" % (time_end - time_start))
 
             log.debug("FMRR valid = %f, best = %f" % (fmrr_valid, self.best_valid_score))
             if fmrr_valid > self.best_valid_score:
                 self.best_valid_score = fmrr_valid
+                
+                log.info("Computing positions and scores for TEST dataset...")
+                time_start = timeit.default_timer()
                 pos_t, fpos_t = self.ev_test.positions(trn.model)
                 ranking_scores(pos_t, fpos_t, trn.epoch, 'TEST')
+                time_end = timeit.default_timer()
+                log.info("%ds spent in computing positions and scores for TEST dataset" % (time_end - time_start))
 
                 if self.args.fout is not None:
                     st = {
@@ -146,6 +151,9 @@ class Experiment(object):
 
     def fit_model(self, xs, ys, sz, setup_trainer=True, trainer=None):
         # create sampling objects
+        # Sample is given the array of triples. 
+        # So that it can randomly create other triples that is not part of the original array
+        # This is useful to make negative samples
         if self.args.sampler == 'corrupted':
             # create type index, here it is ok to use the whole data
             sampler = sample.CorruptedSampler(self.args.ne, xs, ti)
@@ -165,30 +173,30 @@ class Experiment(object):
         for count in trn.model.E.updateCounts:
             if count == 0:
                 notUpdated += 1
-        log.info("%%%% Before fitting, According to instrumentation, %d entities not updated. !!!!!!!!!!!!!!" % (notUpdated))
         log.info("Fitting model %s with trainer %s and parameters %s" % (
             trn.model.__class__.__name__,
             trn.__class__.__name__,
             self.args)
         )
         trn.fit(xs, ys)
-        # TODO: Make eval true
-        self.callback(trn, with_eval=False)
+        self.callback(trn, with_eval=True)
         return trn
 
-    def make_graph(triples, N, M):
+    def make_graph(self, triples, N, M):
         graph_outgoing = [ddict(list) for _ in range(N)]
         graph_incoming = [ddict(list) for _ in range(N)]
-        graph_relations = [ddict(list)for _ in range(M)]
-        graph_relations_rev = [ddict(list)for _ in range(M)]
+        graph_relations_head = [ddict(list)for _ in range(M)]
+        graph_relations_tail = [ddict(list)for _ in range(M)]
         for t in triples:
             head = t[0]
             tail = t[1]
             relation = t[2]
             graph_outgoing[head][relation].append(tail)
             graph_incoming[tail][relation].append(head)
-            graph_relations[relations][head].append(tail)
-            graph_relations_rev[relations][tail].append(head)
+            graph_relations_head[relation][head].append(tail)
+            graph_relations_tail[relation][tail].append(head)
+
+        return {'outgoing': graph_outgoing, 'incoming': graph_incoming, 'relations_head': graph_relations_head, 'relations_tail':graph_relations_tail}
 
     def train(self):
         # read data
@@ -209,7 +217,10 @@ class Experiment(object):
             self.ev_valid = self.evaluator(data['valid_subs'], data['valid_labels'])
 
         # Make a graph from edges in training triples.
-        #graph = self.make_graph(data['train_subs'])
+        graph_start = timeit.default_timer()
+        graph = self.make_graph(data['train_subs'], N, M)
+        graph_end = timeit.default_timer()
+        log.info("time to build the graph = %ds" %(graph_end - graph_start))
 
         if self.args.incr != 100:
 
@@ -226,40 +237,75 @@ class Experiment(object):
             xs = incremental_batches[0]
             ys = np.ones(len(xs))
 
-            pdb.set_trace()
             time_start = timeit.default_timer()
             trainer = self.fit_model(xs, ys, sz)
             time_end = timeit.default_timer()
 
             log.info("Time to fit model for %d%% samples = %ds" % (self.args.incr, time_end - time_start))
+
+            log.info("First step finished : ######################")
+            #updated = 0
+            #for index, count in enumerate(trainer.model.E.updateCounts):
+            #    if count != 0:
+            #        log.info("%d was not updated:\n" % (index))
+            #        if not any(row[0] == index for row in xs) and not any(row[1] == index for row in xs):
+            #            log.info("%d does not appear in xs" % (index))
+            #        updated += 1
+            # else :
+            #     if not any(row[0] == index for row in xs) and not any(row[1] == index for row in xs):
+            #         pdb.set_trace()
+            #         log.info("%d got updated and STILL does not appear in xs" % (index))
+            #     else :
+            #         pdb.set_trace()
+            #         log.info("%d got updated and appeared in xs" % (index))
+
+            #log.info("!!!!!!!!!!! According to instrumentation, %d / %d entities  updated. !!!!!!!!!!!!!!" % (updated, N))
+
+
+            time_start = timeit.default_timer()
             countEntities = [0] * N
             for x in xs:
                 countEntities[x[0]] += 1
                 countEntities[x[1]] += 1
 
-            log.info("First step finished : ######################")
-            notUpdated = 0
-            for index, count in enumerate(trainer.model.E.updateCounts):
-                if count == 0:
-                    #log.info("%d was not updated:\n" % (index))
-                    #if not any(row[0] == index for row in xs) and not any(row[1] == index for row in xs):
-                    #    log.info("%d does not appear in xs" % (index))
-                    notUpdated += 1
-                else :
-                    if not any(row[0] == index for row in xs) and not any(row[1] == index for row in xs):
-                        pdb.set_trace()
-                        log.info("%d got updated and STILL does not appear in xs" % (index))
-                    else :
-                        pdb.set_trace()
-                        log.info("%d got updated and appeared in xs" % (index))
+            considered = 0;
+            for entity, count in enumerate(countEntities):
+                if count != 0:
+                    considered += 1
+                else:
+                    # This entity was not considered in the first batch
+                    # We want to see relations for this entity in remaining dataset and find out the entities that were related
+                    # with this relation in earlier dataset
+                    relations_am_head = graph['outgoing'][entity].keys()
+                    relations_am_tail = graph['incoming'][entity].keys()
 
-            log.info("!!!!!!!!!!! According to instrumentation, %d entities not updated. !!!!!!!!!!!!!!" % (notUpdated))
+                    for r in relations_am_head:
+                        entities_heads_like_me = graph['relations_head'][r].keys()
+                        better_embedding_found = False
+                        for e in entities_heads_like_me:
+                            if (countEntities[e] != 0): # Means that the entity was considered in the first batch of training triples
+                                trainer.model.E[entity] = trainer.model.E[e]
+                                better_embedding_found = True
+                                break
+                        if better_embedding_found:
+                            break
 
-            notConsidered = 0;
-            for count in countEntities:
-                if count == 0:
-                    notConsidered += 1
-            log.info("!!!!!!!!!!! According to Array xs, %d entities not considered. !!!!!!!!!!!!!!" % (notConsidered))
+
+                    for r in relations_am_tail:
+                        entities_tails_like_me = graph['relations_tail'][r].keys()
+                        better_embedding_found = False
+                        for e in entities_tails_like_me:
+                            if (countEntities[e] != 0): # Means that the entity was considered in the first batch of training triples
+                                trainer.model.E[entity] = trainer.model.E[e]
+                                better_embedding_found = True
+                                break
+                        if better_embedding_found:
+                            break
+
+            time_end = timeit.default_timer()
+            log.info("%ds spent in assigning new embeddings" % (time_end - time_start))
+
+            log.info("!!!!!!!!!!!  %d / %d entities were considered in first batch. !!!!!!!!!!!!!!" % (considered, N))
 
             # Select all tuples
             xs = incremental_batches[0] + incremental_batches[1]
@@ -658,7 +704,6 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             self._optim(list(zip(xs, ys)))
             #pdb.set_trace()
 
-            log.info("len(Xs) = %d"% (len(xs)) )
             for x in xs:
                 # each x is (SUB, OBJ, PREDicate)
                 self.model.E.neighbours[x[0]] += 1
@@ -692,11 +737,10 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         for xy in xys:
 
             # samplef is RandomModeSampler
-            pdb.set_trace()
             if self.samplef is not None:
                 # Change head or tail of the tuple (H, T, R)
+                # This code introduces the entities that were not originally present in any tuples (in case of T% of tuples processing)
                 for nx in self.samplef([xy]):
-                    pdb.set_trace()
                     pxs.append(xy)
                     nxs.append(nx)
             else:

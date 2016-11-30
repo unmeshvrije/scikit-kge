@@ -7,7 +7,6 @@ from copy import deepcopy
 from collections import defaultdict as ddict
 from numpy.random import randint
 
-
 class Sampler(object):
 
     def __init__(self, n, modes, ntries=100):
@@ -51,7 +50,6 @@ class RandomSampler(Sampler):
 
     def __init__(self, n, xs, sz):
         super(RandomSampler, self).__init__(n)
-        pdb.set_trace()
         self.xs = set(xs)
         self.sz = sz
 
