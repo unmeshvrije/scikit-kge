@@ -87,7 +87,7 @@ class Experiment(object):
             log.debug("FMRR valid = %f, best = %f" % (fmrr_valid, self.best_valid_score))
             if fmrr_valid > self.best_valid_score:
                 self.best_valid_score = fmrr_valid
-                
+
                 log.info("Computing positions and scores for TEST dataset...")
                 time_start = timeit.default_timer()
                 pos_t, fpos_t = self.ev_test.positions(trn.model)
@@ -151,7 +151,7 @@ class Experiment(object):
 
     def fit_model(self, xs, ys, sz, setup_trainer=True, trainer=None):
         # create sampling objects
-        # Sample is given the array of triples. 
+        # Sample is given the array of triples.
         # So that it can randomly create other triples that is not part of the original array
         # This is useful to make negative samples
         if self.args.sampler == 'corrupted':
