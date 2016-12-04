@@ -51,7 +51,8 @@ class ExpTransE(Experiment):
             samplef=sampler.sample,
             post_epoch=[self.callback],
             file_grad=self.args.fgrad,
-            file_embed=self.args.fembed
+            file_embed=self.args.fembed,
+            file_info=self.args.finfo
         )
 
         return trainer

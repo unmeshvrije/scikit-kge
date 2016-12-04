@@ -6,7 +6,9 @@ SBATCH --ntasks-per-node=16
 . /etc/bashrc
 . /etc/profile.d/modules.sh
 
-source ~/pyenv/bin/activate
+#source ~/pyenv/bin/activate
+
+#pyenv activate venv
 
 APP=./cpi
 ARGS=""
@@ -14,4 +16,4 @@ ARGS=""
 
 python skge/run_transe.py --fin data/wn18.bin \
        --test-all 50 --nb 100 --me 500 \
-       --margin 2.0 --lr 0.1 --ncomp 50 --fembed embeddings-10.txt --incr 10
+       --margin 2.0 --lr 0.1 --ncomp 50 --fembed embeddings-10.txt --incr 10 --finfo info.txt

@@ -26,6 +26,7 @@ _DEF_MAX_EPOCHS = 1000
 _DEF_MARGIN = 1.0
 _FILE_GRADIENTS = 'gradients.txt'
 _FILE_EMBEDDINGS = 'embeddings.txt'
+_FILE_INFO = 'info.txt'
 
 np.random.seed(42)
 
@@ -40,9 +41,11 @@ class Experiment(object):
         self.parser.add_argument('--ne', type=int, help='Numer of negative examples', default=1)
         self.parser.add_argument('--nb', type=int, help='Number of batches')
         self.parser.add_argument('--fout', type=str, help='Path to store model and results', default=None)
+        self.parser.add_argument('--finfo', type=str, help='Path to store additional debug info', default=None)
         self.parser.add_argument('--fgrad', type=str, help='Path to store gradient vector updates for each entity', default=None)
         self.parser.add_argument('--fembed', type=str, help='Path to store final embeddings for every entity and relation', default=None)
         self.parser.add_argument('--fin', type=str, help='Path to input data', default=None)
+        self.parser.add_argument('--embed', type=str, help='Strategy to assign embeddings', defult='kognac')
         self.parser.add_argument('--test-all', type=int, help='Evaluate Test set after x epochs', default=10)
         self.parser.add_argument('--no-pairwise', action='store_const', default=False, const=True)
         self.parser.add_argument('--incr', type=int, help='Percentage of training data to consider in first step', default=100)
@@ -145,8 +148,8 @@ class Experiment(object):
         shuffle(ll)
         first_half_len = (size * percentage) / 100
         second_half_len = size - first_half_len
-        first_half = ll[:first_half_len]
-        second_half = ll[first_half_len:]
+        first_half = ll[:int(first_half_len)]
+        second_half = ll[int(first_half_len):]
         return [first_half, second_half]
 
     def fit_model(self, xs, ys, sz, setup_trainer=True, trainer=None):
@@ -237,6 +240,8 @@ class Experiment(object):
             xs = incremental_batches[0]
             ys = np.ones(len(xs))
 
+            self.args.me = 200
+
             time_start = timeit.default_timer()
             trainer = self.fit_model(xs, ys, sz)
             time_end = timeit.default_timer()
@@ -269,38 +274,56 @@ class Experiment(object):
                 countEntities[x[1]] += 1
 
             considered = 0;
+            if self.file_info is not None:
+                self.file_info.write("Entity (is given) => (embedding of) Entity)\n")
+
+            # Apply proper strategy to assign embeddings here
+            # If kognac, then read the taxonomy file and based on boundaries of classes, assign embeddings of neighbouring entities.
+            # If not, choose other strategy
+            # Else, choose random assignment
             for entity, count in enumerate(countEntities):
                 if count != 0:
                     considered += 1
                 else:
-                    # This entity was not considered in the first batch
-                    # We want to see relations for this entity in remaining dataset and find out the entities that were related
-                    # with this relation in earlier dataset
-                    relations_am_head = graph['outgoing'][entity].keys()
-                    relations_am_tail = graph['incoming'][entity].keys()
 
-                    for r in relations_am_head:
-                        entities_heads_like_me = graph['relations_head'][r].keys()
+                    if argc.embed is "kognac":
+                        e = get_considered_entity_of_my_class(entity)
+                        trainer.model.E[entity] = trainer.model.E[e]
+                    else :
+                        # This entity was not considered in the first batch
+                        # We want to see relations for this entity in remaining dataset and find out the entities that were related
+                        # with this relation in earlier dataset
+                        relations_am_head = graph['outgoing'][entity].keys()
+                        relations_am_tail = graph['incoming'][entity].keys()
+
+                        # Here we can apply SimRank algorithm to all in-neighbours and out-neighbours and then decide
+                        # whose embeddings to initialize the entity with.
+                        # For now, find out the first
                         better_embedding_found = False
-                        for e in entities_heads_like_me:
-                            if (countEntities[e] != 0): # Means that the entity was considered in the first batch of training triples
-                                trainer.model.E[entity] = trainer.model.E[e]
-                                better_embedding_found = True
+                        for r in relations_am_head:
+                            entities_heads_like_me = graph['relations_head'][r].keys()
+                            for e in entities_heads_like_me:
+                                if (countEntities[e] != 0): # Means that the entity was considered in the first batch of training triples
+                                    trainer.model.E[entity] = trainer.model.E[e]
+                                    better_embedding_found = True
+                                    if self.file_info is not None:
+                                        self.file_info.write("%d,%d\n" % (entity,e))
+                                    break
+                            if better_embedding_found:
                                 break
-                        if better_embedding_found:
-                            break
 
-
-                    for r in relations_am_tail:
-                        entities_tails_like_me = graph['relations_tail'][r].keys()
-                        better_embedding_found = False
-                        for e in entities_tails_like_me:
-                            if (countEntities[e] != 0): # Means that the entity was considered in the first batch of training triples
-                                trainer.model.E[entity] = trainer.model.E[e]
-                                better_embedding_found = True
-                                break
-                        if better_embedding_found:
-                            break
+                        if not better_embedding_found:
+                            for r in relations_am_tail:
+                                entities_tails_like_me = graph['relations_tail'][r].keys()
+                                for e in entities_tails_like_me:
+                                    if (countEntities[e] != 0): # Means that the entity was considered in the first batch of training triples
+                                        trainer.model.E[entity] = trainer.model.E[e]
+                                        better_embedding_found = True
+                                        if self.file_info is not None:
+                                            self.file_info.write("%d,%d\n" % (entity,e))
+                                        break
+                                if better_embedding_found:
+                                    break
 
             time_end = timeit.default_timer()
             log.info("%ds spent in assigning new embeddings" % (time_end - time_start))
@@ -311,6 +334,10 @@ class Experiment(object):
             xs = incremental_batches[0] + incremental_batches[1]
             ys = np.ones(len(xs))
 
+            # Here the trainer is already set-up. So we don't call setup_trainer again.
+            # setup_trainer methods initializes the max_epochs parameter which is the number of iterations.
+            # We have added a method to the PairwiseStochasticTrainer class which will set the max_epoch for us
+            trainer.set_max_epochs(300)
             time_start= timeit.default_timer()
             self.fit_model(xs, ys, sz, setup_trainer=False, trainer=trainer)
             time_end = timeit.default_timer()
@@ -570,6 +597,9 @@ class StochasticTrainer(object):
             for key, param in self.model.params.items()
         }
 
+    def set_max_epochs(self, epoch):
+        self.max_epochs = epoch
+
     def __getstate__(self):
         return self.hyperparams
 
@@ -681,8 +711,13 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         self.model.add_hyperparam('margin', kwargs.pop('margin', _DEF_MARGIN))
         fg = kwargs.pop('file_grad', _FILE_GRADIENTS)
         fe = kwargs.pop('file_embed', _FILE_EMBEDDINGS)
+        fi = kwargs.pop('file_info', _FILE_INFO)
         self.file_gradients = None
         self.file_embeddings = None
+        self.file_info = None
+
+        if fi is not None:
+            self.file_info = open(fi, "w")
         if fg is not None:
             self.file_gradients = open(fg, "w")
         if fe is not None:
