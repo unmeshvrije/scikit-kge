@@ -45,7 +45,8 @@ class Experiment(object):
         self.parser.add_argument('--fgrad', type=str, help='Path to store gradient vector updates for each entity', default=None)
         self.parser.add_argument('--fembed', type=str, help='Path to store final embeddings for every entity and relation', default=None)
         self.parser.add_argument('--fin', type=str, help='Path to input data', default=None)
-        self.parser.add_argument('--embed', type=str, help='Strategy to assign embeddings', defult='kognac')
+        self.parser.add_argument('--ftax', type=str, help='Path to the taxonomy file', default=None)
+        self.parser.add_argument('--embed', type=str, help='Strategy to assign embeddings', default='kognac')
         self.parser.add_argument('--test-all', type=int, help='Evaluate Test set after x epochs', default=10)
         self.parser.add_argument('--no-pairwise', action='store_const', default=False, const=True)
         self.parser.add_argument('--incr', type=int, help='Percentage of training data to consider in first step', default=100)
@@ -59,6 +60,11 @@ class Experiment(object):
     def run(self):
         # parse comandline arguments
         self.args = self.parser.parse_args()
+
+        #fi = kwargs.pop('file_info', _FILE_INFO)
+        #self.file_info = None
+        #if fi is not None:
+        #    self.file_info = open(fi, "w")
 
         if self.args.mode == 'rank':
             self.callback = self.ranking_callback
@@ -201,6 +207,12 @@ class Experiment(object):
 
         return {'outgoing': graph_outgoing, 'incoming': graph_incoming, 'relations_head': graph_relations_head, 'relations_tail':graph_relations_tail}
 
+    def get_boundaries(self, classes, entity):
+        for c in classes:
+            if (c[2] >= entity and entity <= c[3]):
+                return {'left': c[2], 'right':c[3]}
+        raise ValueError("Entity %d should not exist" % (entity))
+
     def train(self):
         # read data
         with open(self.args.fin, 'rb') as fin:
@@ -240,7 +252,7 @@ class Experiment(object):
             xs = incremental_batches[0]
             ys = np.ones(len(xs))
 
-            self.args.me = 200
+            self.args.me = 50
 
             time_start = timeit.default_timer()
             trainer = self.fit_model(xs, ys, sz)
@@ -274,9 +286,20 @@ class Experiment(object):
                 countEntities[x[1]] += 1
 
             considered = 0;
-            if self.file_info is not None:
-                self.file_info.write("Entity (is given) => (embedding of) Entity)\n")
+            #if self.file_info is not None:
+            #    self.file_info.write("Entity (is given) => (embedding of) Entity)\n")
 
+            if self.args.embed is "kognac":
+                with open (self.args.ftax, 'r') as ftax:
+                    lines = ftax.readlines()
+
+                ranges = [l.split() for l in lines]
+                classes = []
+                for r in ranges:
+                    if (len(r) == 4):
+                        classes.append(r)
+
+                classes.sort(key=lambda x:int(x[2]))
             # Apply proper strategy to assign embeddings here
             # If kognac, then read the taxonomy file and based on boundaries of classes, assign embeddings of neighbouring entities.
             # If not, choose other strategy
@@ -285,9 +308,32 @@ class Experiment(object):
                 if count != 0:
                     considered += 1
                 else:
+                    if self.args.embed is "kognac":
+                        boundary = get_boundaries(classes, entity)
+                        if (boundary['left'] == entity):
+                            e = entity + 1
+                            while(countEntities[e] == 0 and e != boundary['right']-1):
+                                e += 1
+                            if (e == boundary['right']-1):
+                                # We have not found the neighbour who was considered before and we are crossing right boundary
+                                e -= 1 # Just assign some embedding from its class
+                        else:
+                            e = entity - 1
+                            jump = 0
+                            while (countEntities[e] == 0 and e != boundary['left']):
+                                e -= 1
+                                jump += 1
+                            if (e == boundary['left'] and countEntities[e] != 0):
+                               # We have not found the neighbour who was considered before and we are crossing left boundary
+                               # Try to go to the right
+                               e += jump+1
+                               while(countEntities[e] == 0 and e != boundary['right']-1):
+                                   e += 1
+                               if (e == boundary['right']-1):
+                                   # We have not found the neighbour who was considered before and we are crossing right boundary
+                                   e -= 1 # Just assign some embedding from its class
 
-                    if argc.embed is "kognac":
-                        e = get_considered_entity_of_my_class(entity)
+                        #pdb.set_trace()
                         trainer.model.E[entity] = trainer.model.E[e]
                     else :
                         # This entity was not considered in the first batch
@@ -306,8 +352,8 @@ class Experiment(object):
                                 if (countEntities[e] != 0): # Means that the entity was considered in the first batch of training triples
                                     trainer.model.E[entity] = trainer.model.E[e]
                                     better_embedding_found = True
-                                    if self.file_info is not None:
-                                        self.file_info.write("%d,%d\n" % (entity,e))
+                                    #if self.file_info is not None:
+                                    #    self.file_info.write("%d,%d\n" % (entity,e))
                                     break
                             if better_embedding_found:
                                 break
@@ -319,8 +365,8 @@ class Experiment(object):
                                     if (countEntities[e] != 0): # Means that the entity was considered in the first batch of training triples
                                         trainer.model.E[entity] = trainer.model.E[e]
                                         better_embedding_found = True
-                                        if self.file_info is not None:
-                                            self.file_info.write("%d,%d\n" % (entity,e))
+                                        #if self.file_info is not None:
+                                        #    self.file_info.write("%d,%d\n" % (entity,e))
                                         break
                                 if better_embedding_found:
                                     break
@@ -711,13 +757,9 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         self.model.add_hyperparam('margin', kwargs.pop('margin', _DEF_MARGIN))
         fg = kwargs.pop('file_grad', _FILE_GRADIENTS)
         fe = kwargs.pop('file_embed', _FILE_EMBEDDINGS)
-        fi = kwargs.pop('file_info', _FILE_INFO)
         self.file_gradients = None
         self.file_embeddings = None
-        self.file_info = None
 
-        if fi is not None:
-            self.file_info = open(fi, "w")
         if fg is not None:
             self.file_gradients = open(fg, "w")
         if fe is not None:
