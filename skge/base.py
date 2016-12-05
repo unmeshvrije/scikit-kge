@@ -209,9 +209,10 @@ class Experiment(object):
 
     def get_boundaries(self, classes, entity):
         for c in classes:
-            if (c[2] >= entity and entity <= c[3]):
-                return {'left': c[2], 'right':c[3]}
-        raise ValueError("Entity %d should not exist" % (entity))
+            if (int(c[2]) <= entity and entity <= int(c[3])):
+                return {'left': int(c[2]), 'right':int(c[3])}
+        return {'left' : -1, 'right' : -1}
+        #raise ValueError("Entity %d should not exist" % (entity))
 
     def train(self):
         # read data
@@ -252,7 +253,7 @@ class Experiment(object):
             xs = incremental_batches[0]
             ys = np.ones(len(xs))
 
-            self.args.me = 50
+            self.args.me = 200
 
             time_start = timeit.default_timer()
             trainer = self.fit_model(xs, ys, sz)
@@ -304,12 +305,19 @@ class Experiment(object):
             # If kognac, then read the taxonomy file and based on boundaries of classes, assign embeddings of neighbouring entities.
             # If not, choose other strategy
             # Else, choose random assignment
+            lonely = 0
             for entity, count in enumerate(countEntities):
                 if count != 0:
                     considered += 1
                 else:
                     if self.args.embed is "kognac":
-                        boundary = get_boundaries(classes, entity)
+                        boundary = self.get_boundaries(classes, entity)
+
+                        if (boundary['left'] == -1 and boundary['right'] == -1):
+                            # This entitiy is not a part of any class
+                            lonely += 1
+                            continue
+
                         if (boundary['left'] == entity):
                             e = entity + 1
                             while(countEntities[e] == 0 and e != boundary['right']-1):
@@ -375,6 +383,7 @@ class Experiment(object):
             log.info("%ds spent in assigning new embeddings" % (time_end - time_start))
 
             log.info("!!!!!!!!!!!  %d / %d entities were considered in first batch. !!!!!!!!!!!!!!" % (considered, N))
+            log.info("@@@@@@@@  %d entities were lonley (i.e. not a part of any class" % (lonely))
 
             # Select all tuples
             xs = incremental_batches[0] + incremental_batches[1]
