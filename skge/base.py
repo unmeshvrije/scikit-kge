@@ -57,14 +57,15 @@ class Experiment(object):
         self.best_valid_score = -1.0
         self.exectimes = []
 
-    def run(self):
+    def run(self, *args, **kwargs):
         # parse comandline arguments
         self.args = self.parser.parse_args()
 
-        #fi = kwargs.pop('file_info', _FILE_INFO)
-        #self.file_info = None
-        #if fi is not None:
-        #    self.file_info = open(fi, "w")
+        fi = self.args.finfo
+
+        self.file_info = None
+        if fi is not None:
+            self.file_info = open(fi, "w")
 
         if self.args.mode == 'rank':
             self.callback = self.ranking_callback
@@ -253,7 +254,7 @@ class Experiment(object):
             xs = incremental_batches[0]
             ys = np.ones(len(xs))
 
-            self.args.me = 200
+            self.args.me = 100
 
             time_start = timeit.default_timer()
             trainer = self.fit_model(xs, ys, sz)
@@ -262,23 +263,6 @@ class Experiment(object):
             log.info("Time to fit model for %d%% samples = %ds" % (self.args.incr, time_end - time_start))
 
             log.info("First step finished : ######################")
-            #updated = 0
-            #for index, count in enumerate(trainer.model.E.updateCounts):
-            #    if count != 0:
-            #        log.info("%d was not updated:\n" % (index))
-            #        if not any(row[0] == index for row in xs) and not any(row[1] == index for row in xs):
-            #            log.info("%d does not appear in xs" % (index))
-            #        updated += 1
-            # else :
-            #     if not any(row[0] == index for row in xs) and not any(row[1] == index for row in xs):
-            #         pdb.set_trace()
-            #         log.info("%d got updated and STILL does not appear in xs" % (index))
-            #     else :
-            #         pdb.set_trace()
-            #         log.info("%d got updated and appeared in xs" % (index))
-
-            #log.info("!!!!!!!!!!! According to instrumentation, %d / %d entities  updated. !!!!!!!!!!!!!!" % (updated, N))
-
 
             time_start = timeit.default_timer()
             countEntities = [0] * N
@@ -287,8 +271,8 @@ class Experiment(object):
                 countEntities[x[1]] += 1
 
             considered = 0;
-            #if self.file_info is not None:
-            #    self.file_info.write("Entity (is given) => (embedding of) Entity)\n")
+            if self.file_info is not None:
+                self.file_info.write("Entity (is given) => (embedding of) Entity)\n")
 
             if self.args.embed is "kognac":
                 with open (self.args.ftax, 'r') as ftax:
@@ -326,22 +310,33 @@ class Experiment(object):
                                 # We have not found the neighbour who was considered before and we are crossing right boundary
                                 e -= 1 # Just assign some embedding from its class
                         else:
-                            e = entity - 1
-                            jump = 0
-                            while (countEntities[e] == 0 and e != boundary['left']):
-                                e -= 1
-                                jump += 1
-                            if (e == boundary['left'] and countEntities[e] != 0):
-                               # We have not found the neighbour who was considered before and we are crossing left boundary
-                               # Try to go to the right
-                               e += jump+1
-                               while(countEntities[e] == 0 and e != boundary['right']-1):
-                                   e += 1
-                               if (e == boundary['right']-1):
-                                   # We have not found the neighbour who was considered before and we are crossing right boundary
-                                   e -= 1 # Just assign some embedding from its class
+                            if (boundary['right'] == entity):
+                                e = entity + 1
+                                next_class_boundary = self.get_boundaries(classes, e)
+                                while (countEntities[e] == 0 and e != next_class_boundary['right']-1):
+                                    e += 1
+                                if (e == next_class_boundary['right']-1):
+                                    e -= 1
+                            else:
+                                e = entity - 1
+                                jump = 0
+                                while (countEntities[e] == 0 and e != boundary['left']):
+                                    e -= 1
+                                    jump += 1
+                                if (e == boundary['left'] and countEntities[e] != 0):
+                                   # We have not found the neighbour who was considered before and we are crossing left boundary
+                                   # Try to go to the right
+                                   e += jump+1
+                                   while(countEntities[e] == 0 and e != boundary['right']-1):
+                                       e += 1
+                                   if (e == boundary['right']-1):
+                                       # We have not found the neighbour who was considered before and we are crossing right boundary
+                                       e -= 1 # Just assign some embedding from its class
 
                         #pdb.set_trace()
+                        if self.file_info is not None:
+                            neighbour_boundary = self.get_boundaries(classes, e)
+                            self.file_info.write("%d (%d - %d),%d (%d - %d)\n" % (entity,boundary['left'], boundary['right'], e, neighbour_boundary['left'], neighbour_boundary['right']))
                         trainer.model.E[entity] = trainer.model.E[e]
                     else :
                         # This entity was not considered in the first batch
@@ -360,8 +355,8 @@ class Experiment(object):
                                 if (countEntities[e] != 0): # Means that the entity was considered in the first batch of training triples
                                     trainer.model.E[entity] = trainer.model.E[e]
                                     better_embedding_found = True
-                                    #if self.file_info is not None:
-                                    #    self.file_info.write("%d,%d\n" % (entity,e))
+                                    if self.file_info is not None:
+                                        self.file_info.write("%d,%d\n" % (entity,e))
                                     break
                             if better_embedding_found:
                                 break
@@ -373,8 +368,8 @@ class Experiment(object):
                                     if (countEntities[e] != 0): # Means that the entity was considered in the first batch of training triples
                                         trainer.model.E[entity] = trainer.model.E[e]
                                         better_embedding_found = True
-                                        #if self.file_info is not None:
-                                        #    self.file_info.write("%d,%d\n" % (entity,e))
+                                        if self.file_info is not None:
+                                            self.file_info.write("%d,%d\n" % (entity,e))
                                         break
                                 if better_embedding_found:
                                     break
@@ -400,7 +395,10 @@ class Experiment(object):
         else:
             xs = data['train_subs']
             ys = np.ones(len(xs))
+            time_start= timeit.default_timer()
             self.fit_model(xs, ys, sz)
+            time_end = timeit.default_timer()
+            log.info("Time to fit model for 100%% samples = %ds" % (time_end - time_start))
 
 
 

@@ -51,11 +51,11 @@ class ExpTransE(Experiment):
             samplef=sampler.sample,
             post_epoch=[self.callback],
             file_grad=self.args.fgrad,
-            file_embed=self.args.fembed,
-            file_info=self.args.finfo
+            file_embed=self.args.fembed
         )
 
         return trainer
 
 if __name__ == '__main__':
-    ExpTransE().run()
+    e = ExpTransE()
+    e.run()
