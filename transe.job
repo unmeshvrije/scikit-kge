@@ -16,4 +16,4 @@ ARGS=""
 
 python skge/run_transe.py --fin data/lubm1_uri.bin \
        --test-all 50 --nb 100 --me 500 \
-       --margin 2.0 --lr 0.1 --ncomp 50  --incr 10 --finfo info-assignment.txt --ftax data/taxonomy 
+       --margin 2.0 --lr 0.1 --ncomp 50  --incr 10 --finfo info-assignment.txt --fembed embeddings-lubm1-exp.out  --ftax data/taxonomy
