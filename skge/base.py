@@ -409,7 +409,6 @@ class FilteredRankingEval(object):
         tt = ddict(lambda: {'ss': ddict(list), 'os': ddict(list)})
         self.neval = neval
         self.sz = len(xs)
-        #pdb.set_trace()
         for s, o, p in xs:
             idx[p].append((s, o))
 
@@ -771,6 +770,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             self.file_gradients = open(fg, "w")
         if fe is not None:
             self.file_embeddings = open(fe, "w") 
+            self.pickle_file_embeddings = open(fe+".bin", "wb")
 
     def fit(self, xs, ys):
         # samplef is RandomModeSample set by setup_trainer() method
@@ -802,11 +802,14 @@ class PairwiseStochasticTrainer(StochasticTrainer):
                     index += 1
 
             index = 0
+            embeddings_list = []
             for e in self.model.E:
                 if self.file_embeddings is not None:
                     embeddings = str(e)
+                    embeddings_list.append(e)
                     self.file_embeddings.write("%d,%s\n" % (index, embeddings))
                 index += 1
+            pickle.dump(embeddings_list, self.pickle_file_embeddings, protocol=2)
 
     def _pre_epoch(self):
         self.nviolations = 0

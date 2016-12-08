@@ -1,5 +1,7 @@
-import pickle, pprint, numpy
+import pickle, pprint, numpy, math
 import sys
+import pdb
+from collecions import defaultdict as ddict
 
 def processFile(datafile):
     with open(datafile,'r')as fin:
@@ -18,10 +20,31 @@ def processFile(datafile):
     #for i,e in enumerate(embeddings):
     #    print ("%d,%s\n" % (i, str(e)))
 
+def processPickleFile(datafile):
+    with open(datafile, 'rb') as fin:
+        embeddings = pickle.load(fin)
+    return embeddings
+
 def l1Distance(em1, em2):
     for i, (e1, e2) in enumerate(zip(em1, em2)):
         r = e1 - e2
         print ("%d,%s\n" % (i, r))
+
+# cosine similarity function
+# http://stackoverflow.com/questions/1746501/can-someone-give-an-example-of-cosine-similarity-in-a-very-simple-graphical-wa
+def cosTheta(v1, v2):
+    dot_product = sum(n1 * n2 for n1, n2 in zip(v1, v2) )
+    magnitude1 = math.sqrt(sum(n ** 2 for n in v1))
+    magnitude2 = math.sqrt(sum(n ** 2 for n in v2))
+    return dot_product / (magnitude1 * magnitude2)
+
+
+def similarity(em1, em2):
+    cos_dict = ddict()
+    for i, (e1, e2) in enumerate(zip(em1, em2)):
+        theta = cosTheta(e1, e2)
+        cos_dict[i] = theta
+        print ("%d,%f" % (i, theta))
 
 if __name__=='__main__':
     if len(sys.argv) != 3:
@@ -32,5 +55,6 @@ if __name__=='__main__':
     if (len(embeddings1) != len(embeddings2)):
         print ("Both files contain different number of vectors")
         sys.exit()
-    l1Distance(embeddings1, embeddings2)
+    #l1Distance(embeddings1, embeddings2)
+    similarity(embeddings1, embeddings2)
 
