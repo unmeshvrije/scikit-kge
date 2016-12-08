@@ -1,7 +1,8 @@
 import pickle, pprint, numpy, math
 import sys
 import pdb
-from collecions import defaultdict as ddict
+from collections import defaultdict as ddict
+import operator
 
 def processFile(datafile):
     with open(datafile,'r')as fin:
@@ -44,7 +45,11 @@ def similarity(em1, em2):
     for i, (e1, e2) in enumerate(zip(em1, em2)):
         theta = cosTheta(e1, e2)
         cos_dict[i] = theta
-        print ("%d,%f" % (i, theta))
+        #print ("%d,%f" % (i, theta))
+
+    sorted_dict = sorted(cos_dict.items(), key=operator.itemgetter(1))
+    for k,v in enumerate(sorted_dict):
+        print ("%d, %s" % (k, v))
 
 if __name__=='__main__':
     if len(sys.argv) != 3:
