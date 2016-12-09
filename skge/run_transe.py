@@ -40,6 +40,13 @@ class ExpTransE(Experiment):
         model = TransE(sz, self.args.ncomp, l1=norm, init=self.args.init)
         #pdb.set_trace()
         log.info(" sz = %s  and init_nunif = %d" %( sz, init_nunif.counter))
+
+        if self.args.fembed:
+            with open(self.args.fembed+".init", 'w') as fout:
+                for e in model.E:
+                    es = str(e)
+                    fout.write(es)
+
         #pdb.set_trace()
         # Here the model is initialized (TransE())
         trainer = PairwiseStochasticTrainer(
