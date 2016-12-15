@@ -36,6 +36,13 @@ See the [repository for the experiments in the HolE paper](https://github.com/mn
 
 The different available buildings blocks are described in more detail in the following:
 
+
+### Experiments
+
+* Run transE with maximum epochs 100 and evaluate after 10 iterations.
+* Increase margin parameter for experiment (i.e. when splitting training set into two).
+* Add a command line parameter for marking bad embeddings after each evaluation on a TEST dataset.
+
 ### Model
 
 Instantiating a model, e.g. HolE
