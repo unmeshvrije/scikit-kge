@@ -254,7 +254,7 @@ class Experiment(object):
             xs = incremental_batches[0]
             ys = np.ones(len(xs))
 
-            self.args.me = 100
+            self.args.me = 500
 
             time_start = timeit.default_timer()
             trainer = self.fit_model(xs, ys, sz)
@@ -387,7 +387,7 @@ class Experiment(object):
             # Here the trainer is already set-up. So we don't call setup_trainer again.
             # setup_trainer methods initializes the max_epochs parameter which is the number of iterations.
             # We have added a method to the PairwiseStochasticTrainer class which will set the max_epoch for us
-            trainer.set_max_epochs(300)
+            trainer.set_max_epochs(100)
             time_start= timeit.default_timer()
             self.fit_model(xs, ys, sz, setup_trainer=False, trainer=trainer)
             time_end = timeit.default_timer()

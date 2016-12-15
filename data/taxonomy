@@ -1,33 +1,33 @@
 #Ranges#
 <http://www.w3.org/2000/01/rdf-schema#Class>	50
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Employee>	13
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Publication>	23	580	6579
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Publication>	23	579	6450
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Work>	27
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Organization>	34	9404	9408
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Organization>	34	9177	9214
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Student>	36
 _:genid14	38
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Person>	40	17065	17109
-<http://www.w3.org/2002/07/owl#ObjectProperty>	41	17109	17123
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Person>	40	15518	15984
+<http://www.w3.org/2002/07/owl#ObjectProperty>	41	15984	15998
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#TeachingAssistant>	42
 _:genid13	43
-<http://www.w3.org/2002/07/owl#Restriction>	44	17123	17131
-<http://www.w3.org/2002/07/owl#DatatypeProperty>	45	17131	17138
-<http://www.w3.org/2002/07/owl#Ontology>	46	17138	17139
+<http://www.w3.org/2002/07/owl#Restriction>	44	15998	16006
+<http://www.w3.org/2002/07/owl#DatatypeProperty>	45	16006	16013
+<http://www.w3.org/2002/07/owl#Ontology>	46	16013	16014
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Schedule>	47
-<http://www.w3.org/2002/07/owl#Class>	48	17139	17169
+<http://www.w3.org/2002/07/owl#Class>	48	16014	16045
 <http://www.w3.org/2002/07/owl#TransitiveProperty>	49
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#GraduateStudent>	39	15746	17065
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#ResearchAssistant>	37	15211	15746
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#UndergraduateStudent>	35	9408	15211
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#GraduateStudent>	39	14360	15518
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#ResearchAssistant>	37	13926	14360
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#UndergraduateStudent>	35	9214	13926
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Department>	28
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Institute>	29
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#College>	30
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#ResearchGroup>	31	8205	8425
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#ResearchGroup>	31	8025	8199
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Program>	32
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#University>	33	8425	9404
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Course>	25	7363	8205
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#University>	33	8199	9177
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Course>	25	7084	8025
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Research>	26
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#GraduateCourse>	24	6579	7363
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#GraduateCourse>	24	6450	7084
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Article>	17
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Manual>	18
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Software>	19
@@ -37,19 +37,19 @@ _:genid13	43
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#ConferencePaper>	14
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#JournalArticle>	15
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#TechnicalReport>	16
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Faculty>	9	579	580
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Faculty>	9	561	579
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#AdministrativeStaff>	12
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#SystemsStaff>	10
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#ClericalStaff>	11
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Professor>	6	480	487
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Professor>	6	403	486
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#PostDoc>	7
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Lecturer>	8	487	579
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#AssistantProfessor>	0	0	184
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Lecturer>	8	486	561
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#AssistantProfessor>	0	0	159
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#VisitingProfessor>	1
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Dean>	2
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Chair>	3
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#AssociateProfessor>	4	184	356
-<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#FullProfessor>	5	356	480
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#AssociateProfessor>	4	159	301
+<http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#FullProfessor>	5	301	403
 #Taxonomy#
 <http://www.w3.org/2000/01/rdf-schema#Class>	NULL
 <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Employee>	<http://www.w3.org/2000/01/rdf-schema#Class>
