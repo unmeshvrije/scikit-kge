@@ -84,6 +84,7 @@ class Experiment(object):
             log.info("[%3d] time = %ds, loss = %f" % (trn.epoch, elapsed, trn.loss))
         else:
             log.info("[%3d] time = %ds, violations = %d" % (trn.epoch, elapsed, trn.nviolations))
+            self.fresult.write("[%3d] time = %ds, violations = %d" % (trn.epoch, elapsed, trn.nviolations))
 
         # if we improved the validation error, store model and calc test error
         if (trn.epoch % self.args.test_all == 0) or with_eval:
@@ -92,7 +93,8 @@ class Experiment(object):
             pos_v, fpos_v = self.ev_valid.positions(trn.model)
             fmrr_valid = ranking_scores(pos_v, fpos_v, trn.epoch, 'VALID')
             time_end = timeit.default_timer()
-            log.info("%ds spent in computing positions and scores for VALIDATION dataset" % (time_end - time_start))
+            log.info("At epoch %d , Time spent in computing positions and scores for VALIDATION dataset = %ds" % (trn.epoch, time_end - time_start))
+            self.fresult.write("At epoch %d , Time spent in computing positions and scores for VALIDATION dataset = %ds" % (trn.epoch, time_end - time_start))
 
             log.debug("FMRR valid = %f, best = %f" % (fmrr_valid, self.best_valid_score))
             if fmrr_valid > self.best_valid_score:
@@ -103,7 +105,8 @@ class Experiment(object):
                 pos_t, fpos_t = self.ev_test.positions(trn.model)
                 ranking_scores(pos_t, fpos_t, trn.epoch, 'TEST')
                 time_end = timeit.default_timer()
-                log.info("%ds spent in computing positions and scores for TEST dataset" % (time_end - time_start))
+                log.info("At epoch %d, Time spent in computing positions and scores for TEST dataset = %ds" % (trn.epoch, time_end - time_start))
+                self.fresult.write("At epoch %d, Time spent in computing positions and scores for TEST dataset = %ds" % (trn.epoch, time_end - time_start))
 
                 if self.args.fout is not None:
                     st = {
@@ -232,12 +235,26 @@ class Experiment(object):
         elif self.args.mode == 'lp':
             self.ev_test = self.evaluator(data['test_subs'], data['test_labels'])
             self.ev_valid = self.evaluator(data['valid_subs'], data['valid_labels'])
+        
+        # Construct a name for the result file
+        # <dataset>-<size of training>-<strategy>-epochs-<number of epochs>-eval-<Evaluate after X epochs>-margin-<margin>.out
+        # lubm-full-transe-epochs-500-eval-50-margin-2.0.out
+        dataset = self.args.fin.split('/')[-1].split('.')[0]
+        size = "full" if self.args.incr == 100 else "exp"
+        strategy = self.args.embed
+        epochs = self.args.me
+        ev = self.args.test_all
+        margin = self.args.margin
+        outfile = dataset + "-" + size + "-" + strategy + "-epochs-" + str(epochs) + "-eval-" + str(ev) + "-margin-" + str(margin) + ".out"
+
+        with open(outfile, "w") as fresult:
+            self.fresult = fresult
 
         # Make a graph from edges in training triples.
         graph_start = timeit.default_timer()
         graph = self.make_graph(data['train_subs'], N, M)
         graph_end = timeit.default_timer()
-        log.info("time to build the graph = %ds" %(graph_end - graph_start))
+        log.info("Time to build the graph = %ds" %(graph_end - graph_start))
 
         if self.args.incr != 100:
 
@@ -247,20 +264,20 @@ class Experiment(object):
             triples = data['train_subs']
             incremental_batches = self.bisect_list_by_percent(triples, self.args.incr)
             time_end = timeit.default_timer()
-            log.info("time to choose %d%% samples = %ds" % (self.args.incr, time_end-time_start))
+            log.info("Time to choose %d%% samples = %ds" % (self.args.incr, time_end-time_start))
 
-            log.info("total size = %d, %d%% size = %d, %d%% size = %d" % (len(data['train_subs']), self.args.incr, len(incremental_batches[0]), 100-self.args.incr, len(incremental_batches[1])))
+            log.info("Total size = %d, %d%% size = %d, %d%% size = %d" % (len(data['train_subs']), self.args.incr, len(incremental_batches[0]), 100-self.args.incr, len(incremental_batches[1])))
 
             xs = incremental_batches[0]
             ys = np.ones(len(xs))
 
-            self.args.me = 500
+            self.args.me = 400
 
             time_start = timeit.default_timer()
             trainer = self.fit_model(xs, ys, sz)
             time_end = timeit.default_timer()
 
-            log.info("Time to fit model for %d%% samples = %ds" % (self.args.incr, time_end - time_start))
+            log.info("### Time to fit model for %d%% samples = %ds" % (self.args.incr, time_end - time_start))
 
             log.info("First step finished : ######################")
 
