@@ -12,6 +12,7 @@ import logging
 from sklearn.metrics import precision_recall_curve, auc, roc_auc_score
 from skge import sample
 from skge.util import to_tensor
+import copy
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger('EX-KG')
@@ -28,7 +29,103 @@ _FILE_GRADIENTS = 'gradients.txt'
 _FILE_EMBEDDINGS = 'embeddings.txt'
 _FILE_INFO = 'info.txt'
 
+_SIM_RANK_C = 0.6
+_SIM_RANK_K = 5
+
 np.random.seed(42)
+
+def incoming_neighbours(entity, graph):
+    relations_entity_is_tail = graph['incoming'][entity].keys()
+    incoming_neighbours = []
+    for r in relations_entity_is_tail:
+        for e in graph['relations_tail'][r].keys():
+            incoming_neighbours.append(e)
+
+    return incoming_neighbours
+
+def outgoing_neighbours(entity, graph):
+    relations_entity_is_head = graph['outgoing'][entity].keys()
+    outgoing_neighbours = []
+    for r in relations_entity_is_head:
+        for e in graph['relations_head'][r].keys():
+            outgoing_neighbours.append(e)
+
+    return outgoing_neighbours
+
+
+def computeSimRank(level, e1, e2, graph, simRanks):
+
+    #[float(0)] * SIM_RANK_K
+    for k in range(0, _SIM_RANK_K):
+        if k == 0:
+            score = float(1) if e1 == e2 else float(0)
+            simRanks[(e1, e2)].append(score)
+            if (k == level):
+                return score
+        else :
+            incoming_neighbours_e1 = incoming_neighbours(e1, graph)
+            incoming_neighbours_e2 = incoming_neighbours(e2, graph)
+            num_neighbours_e1 = len(incoming_neighbours_e1)
+            num_neighbours_e2 = len(incoming_neighbours_e2)
+            simRank = float(0)
+            for n1 in incoming_neighbours_e1:
+                for n2 in incoming_neighbours_e2:
+                    prevScore = computeSimRank(k-1, n1, n2, graph, simRanks)
+                    simRank += simRanks[(n1,n2)][k-1]
+                    #simRank += prevScore
+
+            if num_neighbours_e1 == 0 or num_neighbours_e2 == 0:
+                score = 0
+            else:
+                score = (_SIM_RANK_C * simRank) / (len(incoming_neighbours_e1) * len(incoming_neighbours_e2))
+            simRanks[(e1,e2)].append(score)
+            if (k == level):
+                return score
+
+    return simRanks[(e1,e2)][-1]
+
+
+def simrank(G, N, r=0.8, max_iter=5):
+      # init. vars
+    sim_old = ddict(list)
+    sim = ddict(list)
+    for n in range(N):
+        sim[n] = ddict(int)
+        sim[n][n] = 1
+        sim_old[n] = ddict(int)
+        sim_old[n][n] = 0
+
+    # recursively calculate simrank
+    for iter_ctr in range(max_iter):
+        if _is_converge(sim, sim_old):
+            break
+        sim_old = copy.deepcopy(sim)
+        for u in range(N):
+            for v in range(N):
+                if u == v:
+                    continue
+                s_uv = 0.0
+                u_neighbours = incoming_neighbours(u, G)
+                v_neighbours = incoming_neighbours(v, G)
+                for n_u in u_neighbours:
+                    for n_v in v_neighbours:
+                        s_uv += sim_old[n_u][n_v]
+                if len(u_neighbours) == 0 or len(v_neighbours) == 0 :
+                    sim[u][v] = 0
+                else:
+                    sim[u][v] = (r * s_uv / (len(u_neighbours) * len(v_neighbours)))
+    return sim
+
+def _is_converge(s1, s2, eps=1e-4):
+    for i in s1.keys():
+        for j in s1[i].keys():
+            if abs(s1[i][j] - s2[i][j]) >= eps:
+                return False
+    return True
+
+
+
+
 
 class Experiment(object):
 
@@ -91,7 +188,7 @@ class Experiment(object):
             log.info("Computing positions and scores for VALIDATION dataset...")
             time_start = timeit.default_timer()
             pos_v, fpos_v = self.ev_valid.positions(trn.model)
-            fmrr_valid = ranking_scores(pos_v, fpos_v, trn.epoch, 'VALID')
+            fmrr_valid = ranking_scores(self.fresult, pos_v, fpos_v, trn.epoch, 'VALID')
             time_end = timeit.default_timer()
             log.info("At epoch %d , Time spent in computing positions and scores for VALIDATION dataset = %ds" % (trn.epoch, time_end - time_start))
             self.fresult.write("At epoch %d , Time spent in computing positions and scores for VALIDATION dataset = %ds" % (trn.epoch, time_end - time_start))
@@ -103,7 +200,7 @@ class Experiment(object):
                 log.info("Computing positions and scores for TEST dataset...")
                 time_start = timeit.default_timer()
                 pos_t, fpos_t = self.ev_test.positions(trn.model)
-                ranking_scores(pos_t, fpos_t, trn.epoch, 'TEST')
+                ranking_scores(self.fresult, pos_t, fpos_t, trn.epoch, 'TEST')
                 time_end = timeit.default_timer()
                 log.info("At epoch %d, Time spent in computing positions and scores for TEST dataset = %ds" % (trn.epoch, time_end - time_start))
                 self.fresult.write("At epoch %d, Time spent in computing positions and scores for TEST dataset = %ds" % (trn.epoch, time_end - time_start))
@@ -247,15 +344,21 @@ class Experiment(object):
         margin = self.args.margin
         outfile = dataset + "-" + size + "-" + strategy + "-epochs-" + str(epochs) + "-eval-" + str(ev) + "-margin-" + str(margin) + ".out"
 
-        with open(outfile, "w") as fresult:
-            self.fresult = fresult
+        fresult = open(outfile, "w")
+        self.fresult = fresult
 
         # Make a graph from edges in training triples.
         graph_start = timeit.default_timer()
         graph = self.make_graph(data['train_subs'], N, M)
         graph_end = timeit.default_timer()
         log.info("Time to build the graph = %ds" %(graph_end - graph_start))
+        self.fresult.write("Time to build the graph = %ds" %(graph_end - graph_start))
 
+        sim_start = timeit.default_timer()
+        sim = simrank(graph, N) 
+        sim_end = timeit.default_timer()
+
+        log.info("Time to compute simranks = %ds" %(sim_end - sim_start))
         if self.args.incr != 100:
 
             # Select 10% of the tuples here
@@ -271,13 +374,12 @@ class Experiment(object):
             xs = incremental_batches[0]
             ys = np.ones(len(xs))
 
-            self.args.me = 400
-
             time_start = timeit.default_timer()
             trainer = self.fit_model(xs, ys, sz)
             time_end = timeit.default_timer()
 
-            log.info("### Time to fit model for %d%% samples = %ds" % (self.args.incr, time_end - time_start))
+            log.info("### Time to fit model for %d%% samples (%d epochs) = %ds" % (self.args.incr, self.args.me, time_end - time_start))
+            self.fresult.write("### Time to fit model for %d%% samples (%d epochs) = %ds" % (self.args.incr, self.args.me, time_end - time_start))
 
             log.info("First step finished : ######################")
 
@@ -356,43 +458,41 @@ class Experiment(object):
                             self.file_info.write("%d (%d - %d),%d (%d - %d)\n" % (entity,boundary['left'], boundary['right'], e, neighbour_boundary['left'], neighbour_boundary['right']))
                         trainer.model.E[entity] = trainer.model.E[e]
                     else :
+                        # Not a KOGNAC strategy: Do SimRank
                         # This entity was not considered in the first batch
                         # We want to see relations for this entity in remaining dataset and find out the entities that were related
                         # with this relation in earlier dataset
                         relations_am_head = graph['outgoing'][entity].keys()
                         relations_am_tail = graph['incoming'][entity].keys()
-
-                        # Here we can apply SimRank algorithm to all in-neighbours and out-neighbours and then decide
-                        # whose embeddings to initialize the entity with.
-                        # For now, find out the first
-                        better_embedding_found = False
+                        entities_heads_like_me = []
                         for r in relations_am_head:
-                            entities_heads_like_me = graph['relations_head'][r].keys()
-                            for e in entities_heads_like_me:
-                                if (countEntities[e] != 0): # Means that the entity was considered in the first batch of training triples
-                                    trainer.model.E[entity] = trainer.model.E[e]
-                                    better_embedding_found = True
-                                    if self.file_info is not None:
-                                        self.file_info.write("%d,%d\n" % (entity,e))
-                                    break
-                            if better_embedding_found:
-                                break
+                            ent = graph['relations_head'][r].keys()
+                            for e in ent:
+                                entities_heads_like_me.append(e)
 
-                        if not better_embedding_found:
-                            for r in relations_am_tail:
-                                entities_tails_like_me = graph['relations_tail'][r].keys()
-                                for e in entities_tails_like_me:
-                                    if (countEntities[e] != 0): # Means that the entity was considered in the first batch of training triples
-                                        trainer.model.E[entity] = trainer.model.E[e]
-                                        better_embedding_found = True
-                                        if self.file_info is not None:
-                                            self.file_info.write("%d,%d\n" % (entity,e))
-                                        break
-                                if better_embedding_found:
-                                    break
+                        entities_tails_like_me = []
+                        for r in relations_am_tail:
+                            ent = graph['relations_tail'][r].keys()
+                            for e in ent:
+                                entities_tails_like_me.append(e)
+
+                        maxSimRank = float(-1.0)
+                        
+                        for e in entities_heads_like_me:
+                            simRanks = ddict(list)
+
+                            #simRank = computeSimRank(_SIM_RANK_K, entity, e, graph, simRanks)
+                            log.info("SimRank(%d, %d) = %f" % (entity, e , simRank))
+                            self.fresult.write("SimRank(%d, %d) = %f" % (entity, e , simRank))
+                            if simRank > maxSimRank:
+                                maxSimRank = simRank
+                                winner = e
+                        
+                        trainer.model.E[entity] = trainer.model.E[winner]
 
             time_end = timeit.default_timer()
-            log.info("%ds spent in assigning new embeddings" % (time_end - time_start))
+            log.info("Time spent in assigning new embeddings (Strategy %s) = %ds" % (self.args.embed, time_end - time_start))
+            self.fresult.write("Time spent in assigning new embeddings (Strategy %s) = %ds" % (self.args.embed, time_end - time_start))
 
             log.info("!!!!!!!!!!!  %d / %d entities were considered in first batch. !!!!!!!!!!!!!!" % (considered, N))
             log.info("@@@@@@@@  %d entities were lonley (i.e. not a part of any class" % (lonely))
@@ -404,18 +504,20 @@ class Experiment(object):
             # Here the trainer is already set-up. So we don't call setup_trainer again.
             # setup_trainer methods initializes the max_epochs parameter which is the number of iterations.
             # We have added a method to the PairwiseStochasticTrainer class which will set the max_epoch for us
-            trainer.set_max_epochs(100)
+            trainer.set_max_epochs(self.args.me/5)
             time_start= timeit.default_timer()
             self.fit_model(xs, ys, sz, setup_trainer=False, trainer=trainer)
             time_end = timeit.default_timer()
-            log.info("Time to fit model for 100%% samples = %ds" % (time_end - time_start))
+            log.info("Time to fit model for 100%% samples (%d epochs) = %ds" % (trainer.max_epochs, time_end - time_start))
+            self.fresult.write("Time to fit model for 100%% samples (%d epochs) = %ds" % (trainer.max_epochs, time_end - time_start))
         else:
             xs = data['train_subs']
             ys = np.ones(len(xs))
             time_start= timeit.default_timer()
-            self.fit_model(xs, ys, sz)
+            trainer = self.fit_model(xs, ys, sz)
             time_end = timeit.default_timer()
-            log.info("Time to fit model for 100%% samples = %ds" % (time_end - time_start))
+            log.info("Time to fit model for 100%% samples (%d epochs) = %ds" % (trainer.max_epochs, time_end - time_start))
+            self.fresult.write("Time to fit model for 100%% samples (%d epochs) = %ds" % (trainer.max_epochs, time_end - time_start))
 
 
 
@@ -521,22 +623,26 @@ class LinkPredictionEval(object):
         return auc(rc, pr), roc
 
 
-def ranking_scores(pos, fpos, epoch, txt):
+def ranking_scores(fresult, pos, fpos, epoch, txt):
     hpos = [p for k in pos.keys() for p in pos[k]['head']]
     tpos = [p for k in pos.keys() for p in pos[k]['tail']]
     fhpos = [p for k in fpos.keys() for p in fpos[k]['head']]
     ftpos = [p for k in fpos.keys() for p in fpos[k]['tail']]
-    fmrr = _print_pos(
+    fmrr = _print_pos(fresult,
         np.array(hpos + tpos),
         np.array(fhpos + ftpos),
         epoch, txt)
     return fmrr
 
 
-def _print_pos(pos, fpos, epoch, txt):
+def _print_pos(fresult, pos, fpos, epoch, txt):
     mrr, mean_pos, hits = compute_scores(pos)
     fmrr, fmean_pos, fhits = compute_scores(fpos)
     log.info(
+        "[%3d] %s: MRR = %.2f/%.2f, Mean Rank = %.2f/%.2f, Hits@10 = %.2f/%.2f" %
+        (epoch, txt, mrr, fmrr, mean_pos, fmean_pos, hits, fhits)
+    )
+    fresult.write(
         "[%3d] %s: MRR = %.2f/%.2f, Mean Rank = %.2f/%.2f, Hits@10 = %.2f/%.2f" %
         (epoch, txt, mrr, fmrr, mean_pos, fmean_pos, hits, fhits)
     )
@@ -782,6 +888,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         fe = kwargs.pop('file_embed', _FILE_EMBEDDINGS)
         self.file_gradients = None
         self.file_embeddings = None
+        self.pickle_file_embeddings = None
 
         if fg is not None:
             self.file_gradients = open(fg, "w")
@@ -826,7 +933,9 @@ class PairwiseStochasticTrainer(StochasticTrainer):
                     embeddings_list.append(e)
                     self.file_embeddings.write("%d,%s\n" % (index, embeddings))
                 index += 1
-            pickle.dump(embeddings_list, self.pickle_file_embeddings, protocol=2)
+            
+            if self.pickle_file_embeddings is not None:
+                pickle.dump(embeddings_list, self.pickle_file_embeddings, protocol=2)
 
     def _pre_epoch(self):
         self.nviolations = 0
