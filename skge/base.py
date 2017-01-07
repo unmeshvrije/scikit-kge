@@ -181,7 +181,7 @@ class Experiment(object):
             log.info("[%3d] time = %ds, loss = %f" % (trn.epoch, elapsed, trn.loss))
         else:
             log.info("[%3d] time = %ds, violations = %d" % (trn.epoch, elapsed, trn.nviolations))
-            self.fresult.write("[%3d] time = %ds, violations = %d" % (trn.epoch, elapsed, trn.nviolations))
+            self.fresult.write("[%3d] time = %ds, violations = %d\n" % (trn.epoch, elapsed, trn.nviolations))
 
         # if we improved the validation error, store model and calc test error
         if (trn.epoch % self.args.test_all == 0) or with_eval:
@@ -191,7 +191,7 @@ class Experiment(object):
             fmrr_valid = ranking_scores(self.fresult, pos_v, fpos_v, trn.epoch, 'VALID')
             time_end = timeit.default_timer()
             log.info("At epoch %d , Time spent in computing positions and scores for VALIDATION dataset = %ds" % (trn.epoch, time_end - time_start))
-            self.fresult.write("At epoch %d , Time spent in computing positions and scores for VALIDATION dataset = %ds" % (trn.epoch, time_end - time_start))
+            self.fresult.write("At epoch %d , Time spent in computing positions and scores for VALIDATION dataset = %ds\n" % (trn.epoch, time_end - time_start))
 
             log.debug("FMRR valid = %f, best = %f" % (fmrr_valid, self.best_valid_score))
             if fmrr_valid > self.best_valid_score:
@@ -203,7 +203,7 @@ class Experiment(object):
                 ranking_scores(self.fresult, pos_t, fpos_t, trn.epoch, 'TEST')
                 time_end = timeit.default_timer()
                 log.info("At epoch %d, Time spent in computing positions and scores for TEST dataset = %ds" % (trn.epoch, time_end - time_start))
-                self.fresult.write("At epoch %d, Time spent in computing positions and scores for TEST dataset = %ds" % (trn.epoch, time_end - time_start))
+                self.fresult.write("At epoch %d, Time spent in computing positions and scores for TEST dataset = %ds\n" % (trn.epoch, time_end - time_start))
 
                 if self.args.fout is not None:
                     st = {
@@ -352,13 +352,13 @@ class Experiment(object):
         graph = self.make_graph(data['train_subs'], N, M)
         graph_end = timeit.default_timer()
         log.info("Time to build the graph = %ds" %(graph_end - graph_start))
-        self.fresult.write("Time to build the graph = %ds" %(graph_end - graph_start))
+        self.fresult.write("Time to build the graph = %ds\n" %(graph_end - graph_start))
 
-        sim_start = timeit.default_timer()
-        sim = simrank(graph, N) 
-        sim_end = timeit.default_timer()
+        #sim_start = timeit.default_timer()
+        #sim = simrank(graph, N) 
+        #sim_end = timeit.default_timer()
 
-        log.info("Time to compute simranks = %ds" %(sim_end - sim_start))
+        #log.info("Time to compute simranks = %ds" %(sim_end - sim_start))
         if self.args.incr != 100:
 
             # Select 10% of the tuples here
@@ -379,7 +379,7 @@ class Experiment(object):
             time_end = timeit.default_timer()
 
             log.info("### Time to fit model for %d%% samples (%d epochs) = %ds" % (self.args.incr, self.args.me, time_end - time_start))
-            self.fresult.write("### Time to fit model for %d%% samples (%d epochs) = %ds" % (self.args.incr, self.args.me, time_end - time_start))
+            self.fresult.write("### Time to fit model for %d%% samples (%d epochs) = %ds\n" % (self.args.incr, self.args.me, time_end - time_start))
 
             log.info("First step finished : ######################")
 
@@ -414,85 +414,70 @@ class Experiment(object):
                     considered += 1
                 else:
                     if self.args.embed is "kognac":
+                        # Find the six closest entities that were considered before and take their average
+
                         boundary = self.get_boundaries(classes, entity)
+                        quorum = 6
+                        log.info("entity (%d): " % (entity))
 
                         if (boundary['left'] == -1 and boundary['right'] == -1):
                             # This entitiy is not a part of any class
                             lonely += 1
                             continue
 
+                        neighbours = []
                         if (boundary['left'] == entity):
                             e = entity + 1
-                            while(countEntities[e] == 0 and e != boundary['right']-1):
+                            while(countEntities[e] != 0 and e != boundary['right']-1):
+                                neighbours.append(e)
+                                if (len(neighbours) == quorum):
+                                    break
                                 e += 1
-                            if (e == boundary['right']-1):
-                                # We have not found the neighbour who was considered before and we are crossing right boundary
-                                e -= 1 # Just assign some embedding from its class
+                        elif (boundary['right'] == entity):
+                            e = entity - 1
+                            while (countEntities[e] != 0 and e != boundary['left']):
+                                neighbours.append(e)
+                                if (len(neighbours) == quorum):
+                                    break;
+                                e -= 1
                         else:
-                            if (boundary['right'] == entity):
-                                e = entity + 1
-                                next_class_boundary = self.get_boundaries(classes, e)
-                                while (countEntities[e] == 0 and e != next_class_boundary['right']-1):
-                                    e += 1
-                                if (e == next_class_boundary['right']-1):
-                                    e -= 1
-                            else:
-                                e = entity - 1
-                                jump = 0
-                                while (countEntities[e] == 0 and e != boundary['left']):
-                                    e -= 1
-                                    jump += 1
-                                if (e == boundary['left'] and countEntities[e] != 0):
-                                   # We have not found the neighbour who was considered before and we are crossing left boundary
-                                   # Try to go to the right
-                                   e += jump+1
-                                   while(countEntities[e] == 0 and e != boundary['right']-1):
-                                       e += 1
-                                   if (e == boundary['right']-1):
-                                       # We have not found the neighbour who was considered before and we are crossing right boundary
-                                       e -= 1 # Just assign some embedding from its class
+                            e = entity + 1
+                            while(countEntities[e] != 0 and e != boundary['right']-1):
+                                neighbours.append(e)
+                                if (len(neighbours) == (quorum/2)):
+                                    break
+                                e += 1
 
-                        #pdb.set_trace()
-                        if self.file_info is not None:
-                            neighbour_boundary = self.get_boundaries(classes, e)
-                            self.file_info.write("%d (%d - %d),%d (%d - %d)\n" % (entity,boundary['left'], boundary['right'], e, neighbour_boundary['left'], neighbour_boundary['right']))
-                        trainer.model.E[entity] = trainer.model.E[e]
-                    else :
-                        # Not a KOGNAC strategy: Do SimRank
-                        # This entity was not considered in the first batch
-                        # We want to see relations for this entity in remaining dataset and find out the entities that were related
-                        # with this relation in earlier dataset
-                        relations_am_head = graph['outgoing'][entity].keys()
-                        relations_am_tail = graph['incoming'][entity].keys()
-                        entities_heads_like_me = []
-                        for r in relations_am_head:
-                            ent = graph['relations_head'][r].keys()
-                            for e in ent:
-                                entities_heads_like_me.append(e)
+                            required = quorum - (len(neighbours))
 
-                        entities_tails_like_me = []
-                        for r in relations_am_tail:
-                            ent = graph['relations_tail'][r].keys()
-                            for e in ent:
-                                entities_tails_like_me.append(e)
+                            e = entity - 1
+                            while (countEntities[e] != 0 and e != boundary['left']):
+                                neighbours.append(e)
+                                if (len(neighbours) == required):
+                                    break;
+                                e -= 1
 
-                        maxSimRank = float(-1.0)
-                        
-                        for e in entities_heads_like_me:
-                            simRanks = ddict(list)
+                        if len(neighbours) > quorum:
+                            log.info("More neighbours than the quorum : %d" % (len(neighbours)))
 
-                            #simRank = computeSimRank(_SIM_RANK_K, entity, e, graph, simRanks)
-                            log.info("SimRank(%d, %d) = %f" % (entity, e , simRank))
-                            self.fresult.write("SimRank(%d, %d) = %f" % (entity, e , simRank))
-                            if simRank > maxSimRank:
-                                maxSimRank = simRank
-                                winner = e
-                        
-                        trainer.model.E[entity] = trainer.model.E[winner]
+                        quorum = len(neighbours)
+                        log.info(" %d neighbours found\n" % (quorum))
+                        if quorum != 0:
+                            total = np.full((50), 0, dtype=float)
+                            for n in neighbours:
+                                total += trainer.model.E[n]
+
+                            total /= quorum
+                            if self.file_info is not None:
+                                for n in neibhours:
+                                    self.file_info.write("%d, " % (n))
+                                self.file_info.write("\n")
+
+                            trainer.model.E[entity] = total
 
             time_end = timeit.default_timer()
             log.info("Time spent in assigning new embeddings (Strategy %s) = %ds" % (self.args.embed, time_end - time_start))
-            self.fresult.write("Time spent in assigning new embeddings (Strategy %s) = %ds" % (self.args.embed, time_end - time_start))
+            self.fresult.write("Time spent in assigning new embeddings (Strategy %s) = %ds\n" % (self.args.embed, time_end - time_start))
 
             log.info("!!!!!!!!!!!  %d / %d entities were considered in first batch. !!!!!!!!!!!!!!" % (considered, N))
             log.info("@@@@@@@@  %d entities were lonley (i.e. not a part of any class" % (lonely))
@@ -509,7 +494,7 @@ class Experiment(object):
             self.fit_model(xs, ys, sz, setup_trainer=False, trainer=trainer)
             time_end = timeit.default_timer()
             log.info("Time to fit model for 100%% samples (%d epochs) = %ds" % (trainer.max_epochs, time_end - time_start))
-            self.fresult.write("Time to fit model for 100%% samples (%d epochs) = %ds" % (trainer.max_epochs, time_end - time_start))
+            self.fresult.write("Time to fit model for 100%% samples (%d epochs) = %ds\n" % (trainer.max_epochs, time_end - time_start))
         else:
             xs = data['train_subs']
             ys = np.ones(len(xs))
@@ -517,7 +502,7 @@ class Experiment(object):
             trainer = self.fit_model(xs, ys, sz)
             time_end = timeit.default_timer()
             log.info("Time to fit model for 100%% samples (%d epochs) = %ds" % (trainer.max_epochs, time_end - time_start))
-            self.fresult.write("Time to fit model for 100%% samples (%d epochs) = %ds" % (trainer.max_epochs, time_end - time_start))
+            self.fresult.write("Time to fit model for 100%% samples (%d epochs) = %ds\n" % (trainer.max_epochs, time_end - time_start))
 
 
 
@@ -643,7 +628,7 @@ def _print_pos(fresult, pos, fpos, epoch, txt):
         (epoch, txt, mrr, fmrr, mean_pos, fmean_pos, hits, fhits)
     )
     fresult.write(
-        "[%3d] %s: MRR = %.2f/%.2f, Mean Rank = %.2f/%.2f, Hits@10 = %.2f/%.2f" %
+        "[%3d] %s: MRR = %.2f/%.2f, Mean Rank = %.2f/%.2f, Hits@10 = %.2f/%.2f\n" %
         (epoch, txt, mrr, fmrr, mean_pos, fmean_pos, hits, fhits)
     )
     return fmrr
