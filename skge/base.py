@@ -537,9 +537,12 @@ class FilteredRankingEval(object):
         if hasattr(self, 'prepare_global'):
             self.prepare_global(mdl)
 
+        log.info("def position : Before For loop")
+        index = 0
         for p, sos in self.idx.items():
             #pdb.set_trace()
-
+            log.info("def position: iteration #%d\n" % (index))
+            index += 1
             # f stands for filtered (i.e. we will filter the entities that appear in true tuples)
             # p might stand for predicate
             # ppos = positions for predicates, where 
@@ -552,11 +555,16 @@ class FilteredRankingEval(object):
                 #pdb.set_trace()
                 self.prepare(mdl, p)
 
+            log.info("Prepared\n")
             # For some reason, skip last tuple from all the tuples for relation 'P'
             # neval for every relation is -1
             # self.neval[p] will access the last element and we are skipping the last one by
             # array[:-1]
+            inner_index = 0
+            log.info("sos len = %d" % (len(sos)))
             for s, o in sos[:self.neval[p]]:
+                log.info("inner_index = %d\n" % (inner_index))
+                inner_index += 1
                 scores_o = self.scores_o(mdl, s, p).flatten()
                 sortidx_o = argsort(scores_o)[::-1]
                 # Sort all the entities (As objects) and find out the index of the "O" in picture
