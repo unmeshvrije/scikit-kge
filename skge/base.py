@@ -541,6 +541,9 @@ class FilteredRankingEval(object):
         index = 0
         for p, sos in self.idx.items():
             #pdb.set_trace()
+
+            # There will be just one item in the idx dictionary in case of the un-labelled graph (single-relation graph)
+            # So, there will be just one iteration of outer for loop
             log.info("def position: iteration #%d\n" % (index))
             index += 1
             # f stands for filtered (i.e. we will filter the entities that appear in true tuples)
@@ -563,7 +566,7 @@ class FilteredRankingEval(object):
             inner_index = 0
             log.info("sos len = %d" % (len(sos)))
             for s, o in sos[:self.neval[p]]:
-                log.info("inner_index = %d\n" % (inner_index))
+                #log.info("inner_index = %d\n" % (inner_index))
                 inner_index += 1
                 scores_o = self.scores_o(mdl, s, p).flatten()
                 sortidx_o = argsort(scores_o)[::-1]
