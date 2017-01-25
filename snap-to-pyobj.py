@@ -13,8 +13,12 @@ def main(datafile):
     with open(datafile, 'r') as f:
         lines = f.readlines()
         cntEdges = len(lines)
-        cntTraining = int((cntEdges * 99.8)/100)
-        cntTest = int((cntEdges * 0.1) / 100)
+        if cntEdges < 1000:
+            percentageTraining = 80
+        else:
+            percentageTraining = 99.8
+        cntTraining = int((cntEdges * percentageTraining)/100)
+        cntTest = int((cntEdges * (float(100 - percentageTraining)/2)) / 100)
         cntValid = cntTest
 
         testIndex = int(cntTraining + cntTest)
@@ -58,7 +62,7 @@ def main(datafile):
             fromNode = pair.split()[0]
             toNode = pair.split()[1]
 
-            fwalks.write(str(entities_map[fromNode]) + "," + str(entities_map[toNode]) + "\n")
+            fwalks.write(str(entities_map[fromNode]) + " " + str(entities_map[toNode]) + "\n")
 
             if index < cntTraining-1:
                 trains += "(" + str(entities_map[fromNode]) + "," + str(entities_map[toNode]) + ",0),\n"
