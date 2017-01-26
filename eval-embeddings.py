@@ -79,12 +79,16 @@ def cosTheta(v1, v2):
     return dot_product / (magnitude1 * magnitude2)
 
 
-def similarity(em, graph, TOPK):
+def similarity(em, TOPK, training_graph, test_graph):
     out = [[] for i in range(len(em))]
     for i, e in enumerate(em):
         cos_dict = ddict()
-        incoming = incoming_neighbours(i, graph)
-        outgoing = outgoing_neighbours(i, graph)
+        #incoming = incoming_neighbours(i, graph)
+        #outgoing = outgoing_neighbours(i, graph)
+        incoming_train = incoming_neighbours(i, training_graph)
+        outgoing_train = outgoing_neighbours(i, training_graph)
+        incoming_test = incoming_neighbours(i, test_graph)
+        outgoing_test = outgoing_neighbours(i, test_graph)
         for j, obj in enumerate(em):
             if i == j:
                 continue
@@ -93,11 +97,15 @@ def similarity(em, graph, TOPK):
         #print ("%d,%f" % (i, theta))
 
         sorted_dict = sorted(cos_dict.items(), key=operator.itemgetter(1), reverse=True)
+
+        # Add one more column for training/test/Unknown
         for k,v in enumerate(sorted_dict):
             if k == TOPK:
                 break
-            if k in incoming or k in outgoing:
-                out[i].append((v, True))
+            if k in incoming_train or k in outgoing_train:
+                out[i].append((v, True, "TRAIN"))
+            elif k in incoming_test or k in outgoing_test:
+                out[i].append((v, True, "TEST"))
             else:
                 out[i].append((v, False))
     return out
@@ -114,12 +122,14 @@ if __name__=='__main__':
     training = kb['train_subs']
     valid = kb['valid_subs']
     test = kb['test_subs']
+    # this is unfiltered evaluation (because the triples from the training sets are supposed to be guessed correctly)
     dataset = training + valid + test
-    graph = make_graph(dataset, N, M)
+    training_graph = make_graph(training, N, M)
+    test_graph = make_graph(test, N, M)
     if N != len(embeddings):
         print("Number of entities don't match (embeddings file and database)")
         sys.exit()
-    cosines = similarity(embeddings, graph, TOPK)
+    cosines = similarity(embeddings, TOPK, training_graph, test_graph)
 
     outFile = sys.argv[2] + "-" + "TOP-" + str(TOPK) + ".eval.out"
     data = "{"
