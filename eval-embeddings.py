@@ -5,6 +5,12 @@ from collections import defaultdict as ddict
 import operator
 import numpy
 import operator
+import time
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger('EVAL-EMBED')
+
 
 def incoming_neighbours(entity, graph):
     relations_entity_is_tail = graph['incoming'][entity].keys()
@@ -79,9 +85,28 @@ def cosTheta(v1, v2):
     return dot_product / (magnitude1 * magnitude2)
 
 
-def similarity(em, TOPK, training_graph, test_graph):
+def cosineMatrix(em):
+    N = len(em)
+    mat = numpy.full((N,N), 2)
+
+    for i in range(N):
+        mat[i][i] = 1
+
+    i = 0
+    while (i < N):
+        j = i+1
+        while (j < N):
+            mat[i][j] = mat[j][i] = cosTheta(em[i], em[j])
+            j += 1
+        i += 1
+
+    return mat
+
+def similarity(em, mat, TOPK, training_graph, test_graph, flog):
     out = [[] for i in range(len(em))]
     for i, e in enumerate(em):
+        flog.write ("Entity (%d): " %(i))
+        log.info ("Entity (%d): " %(i))
         cos_dict = ddict()
         #incoming = incoming_neighbours(i, graph)
         #outgoing = outgoing_neighbours(i, graph)
@@ -92,11 +117,13 @@ def similarity(em, TOPK, training_graph, test_graph):
         for j, obj in enumerate(em):
             if i == j:
                 continue
-            theta = cosTheta(e, obj)
+            theta = mat[i][j]
             cos_dict[j] = theta
         #print ("%d,%f" % (i, theta))
 
         sorted_dict = sorted(cos_dict.items(), key=operator.itemgetter(1), reverse=True)
+        flog.write("cosine results collected and sorted, ")
+        log.info("cosine results collected and sorted, ")
 
         # Add one more column for training/test/Unknown
         for k,v in enumerate(sorted_dict):
@@ -108,14 +135,23 @@ def similarity(em, TOPK, training_graph, test_graph):
                 out[i].append((v, True, "TEST"))
             else:
                 out[i].append((v, False))
+        flog.write(" Table of evaluation built\n")
+        log.info(" Table of evaluation built\n")
     return out
 
 if __name__=='__main__':
     if len(sys.argv) != 4:
         print ("Usage: python %s <embeddings.txt> <kb.bin> <TOPK>" % (sys.arg[0]))
         sys.exit()
+
+    logfile = sys.argv[1] + ".log"
+    flog = open(logfile, 'w')
+
+    start = time.time()
     embeddings = processFile(sys.argv[1])
     kb = processPickleFile(sys.argv[2])
+    flog.write("Time to process files  = %ds" % (time.time() - start))
+    log.info("Time to process files  = %ds" % (time.time() - start))
     TOPK = int(sys.argv[3])
     N = len(kb['entities'])
     M = len(kb['relations'])
@@ -123,14 +159,28 @@ if __name__=='__main__':
     valid = kb['valid_subs']
     test = kb['test_subs']
     # this is unfiltered evaluation (because the triples from the training sets are supposed to be guessed correctly)
-    dataset = training + valid + test
+    #dataset = training + valid + test
+    start = time.time()
     training_graph = make_graph(training, N, M)
     test_graph = make_graph(test, N, M)
+    flog.write("Time to build graphs from triples = %ds\n" %(time.time() - start))
+    log.info("Time to build graphs from triples = %ds\n" %(time.time() - start))
+
     if N != len(embeddings):
         print("Number of entities don't match (embeddings file and database)")
         sys.exit()
-    cosines = similarity(embeddings, TOPK, training_graph, test_graph)
 
+    start = time.time()
+    mat = cosineMatrix(embeddings)
+    flog.write("Time to make cosine distance matrix = %ds\n" % (time.time() - start))
+    log.info("Time to make cosine distance matrix = %ds\n" % (time.time() - start))
+
+    start = time.time()
+    cosines = similarity(embeddings, mat, TOPK, training_graph, test_graph, flog)
+    flog.write("Time to sort and rank best matching objects = %ds\n"%(time.time() - start))
+    log.info("Time to sort and rank best matching objects = %ds\n"%(time.time() - start))
+
+    start = time.time()
     outFile = sys.argv[2] + "-" + "TOP-" + str(TOPK) + ".eval.out"
     data = "{"
     for i, pairs in enumerate(cosines):
@@ -141,3 +191,5 @@ if __name__=='__main__':
     data += "}"
     with open(outFile, 'w') as fout:
         fout.write(data)
+    flog.write("Time to write out file = %ds" % (time.time() - start))
+    log.info("Time to write out file = %ds" % (time.time() - start))
