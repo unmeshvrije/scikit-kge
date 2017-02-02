@@ -40,7 +40,6 @@ def main(datafile):
             if len(pair.split()) < 2:
                 print ("Line [%d] does not represent an edge" % (index))
                 continue
-            
             fromNode = pair.split()[0]
             toNode = pair.split()[1]
             if fromNode not in entities_set:
