@@ -16,7 +16,7 @@ def main(datafile):
         if cntEdges < 100000:
             percentageTraining = 80
         else:
-            percentageTraining = 99
+            percentageTraining = 99.8
         cntTraining = int((cntEdges * percentageTraining)/100)
         cntTest = int((cntEdges * (float(100 - percentageTraining)/2)) / 100)
         cntValid = cntTest
