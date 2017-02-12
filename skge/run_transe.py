@@ -24,7 +24,7 @@ class TransEEval(FilteredRankingEval):
 
     def scores_s(self, mdl, o, p):
         #pdb.set_trace()
-        # Subtract embeddings of the "O"bject from the S + P 
+        # Subtract embeddings of the "O"bject from the S + P
         return -np.sum(np.abs(self.ER - mdl.E[o]), axis=1)
 
 

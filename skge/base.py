@@ -332,7 +332,7 @@ class Experiment(object):
         elif self.args.mode == 'lp':
             self.ev_test = self.evaluator(data['test_subs'], data['test_labels'])
             self.ev_valid = self.evaluator(data['valid_subs'], data['valid_labels'])
-        
+
         # Construct a name for the result file
         # <dataset>-<size of training>-<strategy>-epochs-<number of epochs>-eval-<Evaluate after X epochs>-margin-<margin>.out
         # lubm-full-transe-epochs-500-eval-50-margin-2.0.out
@@ -355,7 +355,7 @@ class Experiment(object):
         self.fresult.write("Time to build the graph = %ds\n" %(graph_end - graph_start))
 
         #sim_start = timeit.default_timer()
-        #sim = simrank(graph, N) 
+        #sim = simrank(graph, N)
         #sim_end = timeit.default_timer()
 
         #log.info("Time to compute simranks = %ds" %(sim_end - sim_start))
@@ -546,10 +546,12 @@ class FilteredRankingEval(object):
             # So, there will be just one iteration of outer for loop
             log.info("def position: iteration #%d\n" % (index))
             index += 1
-            # f stands for filtered (i.e. we will filter the entities that appear in true tuples)
+            # f stands for filtered
+            # For filtered evaluation, we consider only the neighbours of the entity to compute scores with
+            # For unfiltered evaluation, we consider all entities to compute scores with
             # p might stand for predicate
-            # ppos = positions for predicates, where 
-            #'head' will contain the array of most eligible candidates for Head/Subject and 
+            # ppos = positions for predicates, where
+            #'head' will contain the array of most eligible candidates for Head/Subject and
             #'tail' will contain the array of most eligible candidates for Tail/Objects
             ppos = {'head': [], 'tail': []}
             pfpos = {'head': [], 'tail': []}
@@ -583,11 +585,12 @@ class FilteredRankingEval(object):
                 # Remove the object "O" that we are currently considering from this list
                 rm_idx = [i for i in rm_idx if i != o]
 
-                # Set the scores of KNOWN objects (known truths) to infinity 
+                # Set the scores of KNOWN objects (known truths) to infinity
                 scores_o[rm_idx] = -np.Inf
                 sortidx_o = argsort(scores_o)[::-1]
                 pfpos['tail'].append(np.where(sortidx_o == o)[0][0] + 1)
 
+                # Unfiltered scores: calculate scores with all entities and sort them
                 scores_s = self.scores_s(mdl, o, p).flatten()
                 sortidx_s = argsort(scores_s)[::-1]
                 ppos['head'].append(np.where(sortidx_s == s)[0][0] + 1)
