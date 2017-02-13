@@ -19,7 +19,8 @@ class TransEEval(FilteredRankingEval):
 
     def scores_o(self, mdl, s, p):
         #pdb.set_trace()
-        # Subtract embeddings of every entity from the "S"ubject
+        # ER already contains embedding(p) + embeddings(e)
+        # We access the embedding vector of "S" (the head) and subtract embeddings of all other entities from it
         return -np.sum(np.abs(self.ER[s] - mdl.E), axis=1)
 
     def scores_s(self, mdl, o, p):

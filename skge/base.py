@@ -538,26 +538,26 @@ class FilteredRankingEval(object):
             self.prepare_global(mdl)
 
         log.info("def position : Before For loop")
-        index = 0
+        count = 0
         for p, sos in self.idx.items():
             #pdb.set_trace()
 
             # There will be just one item in the idx dictionary in case of the un-labelled graph (single-relation graph)
             # So, there will be just one iteration of outer for loop
-            log.info("def position: iteration #%d\n" % (index))
-            index += 1
             # f stands for filtered
-            # For filtered evaluation, we consider only the neighbours of the entity to compute scores with
             # For unfiltered evaluation, we consider all entities to compute scores with
+            # For filtered evaluation, we exclude the neighbours of the entity to compute scores with
             # p might stand for predicate
             # ppos = positions for predicates, where
-            #'head' will contain the array of most eligible candidates for Head/Subject and
-            #'tail' will contain the array of most eligible candidates for Tail/Objects
+            # dictionary with 'head' as the key, will store positions of T after keeping H and P constant
+            # dictionary with 'tail' as the key, will store positions of H after keeping T and P constant
             ppos = {'head': [], 'tail': []}
             pfpos = {'head': [], 'tail': []}
 
+            # prepare() method adds embeddings of p to embeddings of every entity
             if hasattr(self, 'prepare'):
                 #pdb.set_trace()
+                # Add the embeddings of p to every entity of this model
                 self.prepare(mdl, p)
 
             log.info("Prepared\n")
@@ -565,11 +565,9 @@ class FilteredRankingEval(object):
             # neval for every relation is -1
             # self.neval[p] will access the last element and we are skipping the last one by
             # array[:-1]
-            inner_index = 0
             log.info("sos len = %d" % (len(sos)))
-            for s, o in sos[:self.neval[p]]:
-                #log.info("inner_index = %d\n" % (inner_index))
-                inner_index += 1
+            for s, o in sos:#[:self.neval[p]]:
+                count += 1
                 scores_o = self.scores_o(mdl, s, p).flatten()
                 sortidx_o = argsort(scores_o)[::-1]
                 # Sort all the entities (As objects) and find out the index of the "O" in picture
@@ -585,7 +583,7 @@ class FilteredRankingEval(object):
                 # Remove the object "O" that we are currently considering from this list
                 rm_idx = [i for i in rm_idx if i != o]
 
-                # Set the scores of KNOWN objects (known truths) to infinity
+                # Set the scores of KNOWN objects (known truths) to infinity = Filter the entities that already appear as neighbours
                 scores_o[rm_idx] = -np.Inf
                 sortidx_o = argsort(scores_o)[::-1]
                 pfpos['tail'].append(np.where(sortidx_o == o)[0][0] + 1)
@@ -603,6 +601,8 @@ class FilteredRankingEval(object):
             pos[p] = ppos
             fpos[p] = pfpos
 
+        if count != self.sz:
+            log.info("cnt = %d, self.sz = %d" % (count, self.sz))
         return pos, fpos
 
 
@@ -815,7 +815,6 @@ class StochasticTrainer(object):
             # Thus, batch will contain array of 1414 elements each time
             # entities with ids 0-1413, 1414-2827, 2828-4241 etc.
             for batch in np.split(idx, batch_idx):
-                
                 '''
                 xys is array of tuple pairs as follows
                 ((S1, O1, P1), 1.0 )
@@ -835,7 +834,6 @@ class StochasticTrainer(object):
             # check callback function, if false return
             # post_epoch is the self.callback. It was set in setup_trainer() method
             # of TransEExp
-            
             for f in self.post_epoch:
                 if not f(self):
                     break
