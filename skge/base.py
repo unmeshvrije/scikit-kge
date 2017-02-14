@@ -13,6 +13,7 @@ from sklearn.metrics import precision_recall_curve, auc, roc_auc_score
 from skge import sample
 from skge.util import to_tensor
 import copy
+import itertools
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger('EX-KG')
@@ -27,6 +28,10 @@ _DEF_MAX_EPOCHS = 1000
 _DEF_MARGIN = 1.0
 _FILE_GRADIENTS = 'gradients.txt'
 _FILE_EMBEDDINGS = 'embeddings.txt'
+_FILE_TAIL_PREDICTIONS_UNFILTERED = 'tail-predictions-unfiltered.txt'
+_FILE_TAIL_PREDICTIONS_FILTERED = 'tail-predictions-filtered.txt'
+_FILE_HEAD_PREDICTIONS_UNFILTERED = 'head-predictions-unfiltered.txt'
+_FILE_HEAD_PREDICTIONS_FILTERED = 'head-predictions-filtered.txt'
 _FILE_INFO = 'info.txt'
 
 _SIM_RANK_C = 0.6
@@ -34,24 +39,18 @@ _SIM_RANK_K = 5
 
 np.random.seed(42)
 
-def incoming_neighbours(entity, graph):
-    relations_entity_is_tail = graph['incoming'][entity].keys()
-    incoming_neighbours = []
-    for r in relations_entity_is_tail:
-        for e in graph['relations_tail'][r].keys():
-            incoming_neighbours.append(e)
+graph = ddict()
 
+
+def incoming_neighbours(entity, graph):
+    all_lists = list(graph['incoming'][entity].values())
+    incoming_neighbours = list(itertools.chain(*all_lists))
     return incoming_neighbours
 
 def outgoing_neighbours(entity, graph):
-    relations_entity_is_head = graph['outgoing'][entity].keys()
-    outgoing_neighbours = []
-    for r in relations_entity_is_head:
-        for e in graph['relations_head'][r].keys():
-            outgoing_neighbours.append(e)
-
+    all_lists = list(graph['outgoing'][entity].values())
+    outgoing_neighbours = list(itertools.chain(*all_lists))
     return outgoing_neighbours
-
 
 def computeSimRank(level, e1, e2, graph, simRanks):
 
@@ -187,6 +186,11 @@ class Experiment(object):
         if (trn.epoch % self.args.test_all == 0) or with_eval:
             log.info("Computing positions and scores for VALIDATION dataset...")
             time_start = timeit.default_timer()
+
+            plot = False
+            if trn.epoch == self.args.me:
+                plot = True
+
             pos_v, fpos_v = self.ev_valid.positions(trn.model)
             fmrr_valid = ranking_scores(self.fresult, pos_v, fpos_v, trn.epoch, 'VALID')
             time_end = timeit.default_timer()
@@ -194,12 +198,12 @@ class Experiment(object):
             self.fresult.write("At epoch %d , Time spent in computing positions and scores for VALIDATION dataset = %ds\n" % (trn.epoch, time_end - time_start))
 
             log.debug("FMRR valid = %f, best = %f" % (fmrr_valid, self.best_valid_score))
-            if fmrr_valid > self.best_valid_score:
+            if fmrr_valid > self.best_valid_score or plot:
                 self.best_valid_score = fmrr_valid
 
                 log.info("Computing positions and scores for TEST dataset...")
                 time_start = timeit.default_timer()
-                pos_t, fpos_t = self.ev_test.positions(trn.model)
+                pos_t, fpos_t = self.ev_test.positions(trn.model, plot=plot)
                 ranking_scores(self.fresult, pos_t, fpos_t, trn.epoch, 'TEST')
                 time_end = timeit.default_timer()
                 log.info("At epoch %d, Time spent in computing positions and scores for TEST dataset = %ds" % (trn.epoch, time_end - time_start))
@@ -343,12 +347,31 @@ class Experiment(object):
         ev = self.args.test_all
         margin = self.args.margin
         outfile = dataset + "-" + size + "-" + strategy + "-epochs-" + str(epochs) + "-eval-" + str(ev) + "-margin-" + str(margin) + ".out"
-
         fresult = open(outfile, "w")
         self.fresult = fresult
 
+        global _FILE_TAIL_PREDICTIONS_UNFILTERED
+        global _FILE_TAIL_PREDICTIONS_FILTERED
+        global _FILE_HEAD_PREDICTIONS_UNFILTERED
+        global _FILE_HEAD_PREDICTIONS_FILTERED
+
+        _FILE_TAIL_PREDICTIONS_UNFILTERED = dataset + "-" + _FILE_TAIL_PREDICTIONS_UNFILTERED
+        _FILE_TAIL_PREDICTIONS_FILTERED = dataset + "-" + _FILE_TAIL_PREDICTIONS_FILTERED
+        _FILE_HEAD_PREDICTIONS_UNFILTERED = dataset + "-" + _FILE_HEAD_PREDICTIONS_UNFILTERED
+        _FILE_HEAD_PREDICTIONS_FILTERED = dataset + "-" + _FILE_HEAD_PREDICTIONS_FILTERED
+
+        with open(_FILE_TAIL_PREDICTIONS_UNFILTERED, 'w') as fplot:
+            fplot.write("")
+        with open(_FILE_TAIL_PREDICTIONS_FILTERED, 'w') as fplot:
+            fplot.write("")
+        with open(_FILE_HEAD_PREDICTIONS_UNFILTERED, 'w') as fplot:
+            fplot.write("")
+        with open(_FILE_HEAD_PREDICTIONS_FILTERED, 'w') as fplot:
+            fplot.write("")
+
         # Make a graph from edges in training triples.
         graph_start = timeit.default_timer()
+        global graph
         graph = self.make_graph(data['train_subs'], N, M)
         graph_end = timeit.default_timer()
         log.info("Time to build the graph = %ds" %(graph_end - graph_start))
@@ -530,7 +553,7 @@ class FilteredRankingEval(object):
             else:
                 self.neval[p] = np.int(np.ceil(neval * len(sos) / len(xs)))
 
-    def positions(self, mdl):
+    def positions(self, mdl, plot=False):
         pos = {}
         fpos = {}
 
@@ -572,10 +595,14 @@ class FilteredRankingEval(object):
                 sortidx_o = argsort(scores_o)[::-1]
                 # Sort all the entities (As objects) and find out the index of the "O" in picture
                 # Store the index+1 in the ppos['tail]
-                ppos['tail'].append(np.where(sortidx_o == o)[0][0] + 1)
+                rank = np.where(sortidx_o == o)[0][0] + 1
+                ppos['tail'].append(rank)
 
-                #pdb.set_trace()
-
+                if plot:
+                    outgoing = outgoing_neighbours(s, graph)
+                    outDegree = len(outgoing)
+                    with open(_FILE_TAIL_PREDICTIONS_UNFILTERED, 'a') as fplot:
+                        fplot.write("%d %d\n" % (outDegree, 1 if rank <= 10 else 2))
                 # In the real data, for relation "P", which entities appear as objects for subject "S"
                 rm_idx = self.tt[p]['os'][s]
                 # rm_idx is the list of such entities
@@ -586,18 +613,37 @@ class FilteredRankingEval(object):
                 # Set the scores of KNOWN objects (known truths) to infinity = Filter the entities that already appear as neighbours
                 scores_o[rm_idx] = -np.Inf
                 sortidx_o = argsort(scores_o)[::-1]
-                pfpos['tail'].append(np.where(sortidx_o == o)[0][0] + 1)
+                rank = np.where(sortidx_o == o)[0][0] + 1
+                pfpos['tail'].append(rank)
 
+                if plot:
+                    with open(_FILE_TAIL_PREDICTIONS_FILTERED, 'a') as fplot:
+                        fplot.write("%d %d\n" % (outDegree, 1 if rank <= 10 else 2))
+
+                ################  HEAD predictions : Keep TAIL/OBJECT constant #######################
                 # Unfiltered scores: calculate scores with all entities and sort them
+
+
                 scores_s = self.scores_s(mdl, o, p).flatten()
                 sortidx_s = argsort(scores_s)[::-1]
-                ppos['head'].append(np.where(sortidx_s == s)[0][0] + 1)
+                rank = np.where(sortidx_s == s)[0][0] + 1
+                ppos['head'].append(rank)
+
+                if plot:
+                    incoming = incoming_neighbours(o, graph)
+                    inDegree = len(incoming)
+                    with open(_FILE_HEAD_PREDICTIONS_UNFILTERED, 'a') as fplot:
+                        fplot.write("%d %d\n" % (inDegree, 1 if rank <= 10 else 2))
 
                 rm_idx = self.tt[p]['ss'][o]
                 rm_idx = [i for i in rm_idx if i != s]
                 scores_s[rm_idx] = -np.Inf
                 sortidx_s = argsort(scores_s)[::-1]
-                pfpos['head'].append(np.where(sortidx_s == s)[0][0] + 1)
+                rank = np.where(sortidx_s == s)[0][0] + 1
+                pfpos['head'].append(rank)
+                if plot:
+                    with open(_FILE_HEAD_PREDICTIONS_FILTERED, 'a') as fplot:
+                        fplot.write("%d %d\n" % (inDegree, 1 if rank <= 10 else 2))
             pos[p] = ppos
             fpos[p] = pfpos
 
@@ -930,7 +976,6 @@ class PairwiseStochasticTrainer(StochasticTrainer):
                     embeddings_list.append(e)
                     self.file_embeddings.write("%d,%s\n" % (index, embeddings))
                 index += 1
-            
             if self.pickle_file_embeddings is not None:
                 pickle.dump(embeddings_list, self.pickle_file_embeddings, protocol=2)
 

@@ -27,7 +27,7 @@ def init_nunif(sz):
         See Glorot X., Bengio Y.: "Understanding the difficulty of training
         deep feedforward neural networks". AISTATS, 2010
         """
-        # This is the initialization that corresponds to algorithm in TransE paper 
+        # This is the initialization that corresponds to algorithm in TransE paper
         #pdb.set_trace()
         bnd = sqrt(6) / sqrt(sz[0] + sz[1])
         # Initial vector embedding for each entity
