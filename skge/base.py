@@ -189,6 +189,7 @@ class Experiment(object):
 
             plot = False
             if trn.epoch == self.args.me:
+                log.info("PLOT ME\n")
                 plot = True
 
             pos_v, fpos_v = self.ev_valid.positions(trn.model)
@@ -599,10 +600,10 @@ class FilteredRankingEval(object):
                 ppos['tail'].append(rank)
 
                 if plot:
-                    outgoing = outgoing_neighbours(s, graph)
-                    outDegree = len(outgoing)
+                    incoming = incoming_neighbours(o, graph)
+                    inDegree = len(incoming)
                     with open(_FILE_TAIL_PREDICTIONS_UNFILTERED, 'a') as fplot:
-                        fplot.write("%d %d\n" % (outDegree, 1 if rank <= 10 else 2))
+                        fplot.write("%d %d\n" % (inDegree, 1 if rank <= 10 else 2))
                 # In the real data, for relation "P", which entities appear as objects for subject "S"
                 rm_idx = self.tt[p]['os'][s]
                 # rm_idx is the list of such entities
@@ -618,7 +619,7 @@ class FilteredRankingEval(object):
 
                 if plot:
                     with open(_FILE_TAIL_PREDICTIONS_FILTERED, 'a') as fplot:
-                        fplot.write("%d %d\n" % (outDegree, 1 if rank <= 10 else 2))
+                        fplot.write("%d %d\n" % (inDegree, 1 if rank <= 10 else 2))
 
                 ################  HEAD predictions : Keep TAIL/OBJECT constant #######################
                 # Unfiltered scores: calculate scores with all entities and sort them
@@ -630,10 +631,10 @@ class FilteredRankingEval(object):
                 ppos['head'].append(rank)
 
                 if plot:
-                    incoming = incoming_neighbours(o, graph)
-                    inDegree = len(incoming)
+                    outgoing = outgoing_neighbours(s, graph)
+                    outDegree = len(outgoing)
                     with open(_FILE_HEAD_PREDICTIONS_UNFILTERED, 'a') as fplot:
-                        fplot.write("%d %d\n" % (inDegree, 1 if rank <= 10 else 2))
+                        fplot.write("%d %d\n" % (outDegree, 1 if rank <= 10 else 2))
 
                 rm_idx = self.tt[p]['ss'][o]
                 rm_idx = [i for i in rm_idx if i != s]
@@ -643,7 +644,7 @@ class FilteredRankingEval(object):
                 pfpos['head'].append(rank)
                 if plot:
                     with open(_FILE_HEAD_PREDICTIONS_FILTERED, 'a') as fplot:
-                        fplot.write("%d %d\n" % (inDegree, 1 if rank <= 10 else 2))
+                        fplot.write("%d %d\n" % (outDegree, 1 if rank <= 10 else 2))
             pos[p] = ppos
             fpos[p] = pfpos
 

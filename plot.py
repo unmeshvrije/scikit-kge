@@ -1,50 +1,49 @@
-import matplotlib.pyploy as plt
+import matplotlib.pyplot as plt
+import sys
+from collections import defaultdict as ddict
 
 file1 = sys.argv[1]
 file2 = sys.argv[2]
 file3 = sys.argv[3]
 file4 = sys.argv[4]
 
-x1 = []
-x2 = []
-x3 = []
-x4 = []
-y1 = []
-y2 = []
-y3 = []
-y4 = []
 
-with open(file1, 'r') as f:
-    lines = f.readlines()
-    for l in lines:
-        tokens = l.split()
-        x1.append(tokens[0])
-        y1.append(tokens[1])
+def processLogFile(logFile):
+    x = []
+    y = []
+    d = ddict(lambda: {'hits': 0 , 'miss' : 0})
+    with open(logFile, 'r') as f:
+        lines = f.readlines()
+        for l in lines:
+            tokens = l.split()
+            degree = int(tokens[0])
+            result = int(tokens[1])
+            x.append(degree)
+            y.append(result)
+            if result == 1:
+                d[degree]['hits'] += 1
+            elif result == 2:
+                d[degree]['miss'] += 1
+            else:
+                print ("Second column must contain 1 or 2 : %s" % (l))
+                sys.exit()
+    return x,y,d
 
-with open(file2, 'r') as f:
-    lines = f.readlines()
-    for l in lines:
-        tokens = l.split()
-        x2.append(tokens[0])
-        y2.append(tokens[1])
+def writeHistogramDataFile(logFile, dictionary):
+    data = "deg Hits Misses\n"
+    for record in dictionary.items():
+        data += str(record[0]) +  " " + str(record[1]['hits']) +  " " + str(record[1]['miss']) + "\n"
+    with open(logFile + "-hist.dat", 'w') as fout:
+        fout.write(data)
 
-with open(file3, 'r') as f:
-    lines = f.readlines()
-    for l in lines:
-        tokens = l.split()
-        x3.append(tokens[0])
-        y3.append(tokens[1])
+x1, y1, d1 = processLogFile(file1)
+x2, y2, d2 = processLogFile(file2)
+x3, y3, d3 = processLogFile(file3)
+x4, y4, d4 = processLogFile(file4)
 
-with open(file4, 'r') as f:
-    lines = f.readlines()
-    for l in lines:
-        tokens = l.split()
-        x4.append(tokens[0])
-        y4.append(tokens[1])
+writeHistogramDataFile(file1, d1)
+writeHistogramDataFile(file2, d2)
+writeHistogramDataFile(file3, d3)
+writeHistogramDataFile(file4, d4)
 
-plt.plot(x1, y1)
-plt.plot(x2, y2)
-plt.plot(x3, y3)
-plt.plot(x4, y4)
-
-plt.legend(['head-pred-unfiltered', 'head-pred-filtered', 'tail-pred-unfiltered', 'tail-pred-filtered'], loc='upper left')
+#plt.legend(['head-pred-unfiltered', 'head-pred-filtered', 'tail-pred-unfiltered', 'tail-pred-filtered'], loc='upper left')
