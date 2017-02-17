@@ -9,7 +9,18 @@ from random import shuffle
 #test_subs
 #
 
-def main(datafile):
+def main(datafile, spo, pagerankMap):
+    index_of_subject = 0
+    index_of_object = 1
+    index_of_predicate = 2
+    if spo:
+        index_of_object = 2
+        index_of_predicate = 1
+
+    pagerank = False
+    if len(pagerankMap) != 0:
+        pagerank = True
+
     with open(datafile, 'r') as f:
         lines = f.readlines()
         cntEdges = len(lines)
@@ -47,10 +58,10 @@ def main(datafile):
                 print ("Line [%d] does not represent an edge" % (index))
                 continue
             parts = pair.split()
-            fromNode = parts[0]
-            toNode = parts[1]
+            fromNode = parts[index_of_subject]
+            toNode = parts[index_of_object]
             if (len(parts) > 2):
-                edgeLabel = parts[2]
+                edgeLabel = parts[index_of_predicate]
                 if edgeLabel not in relations_set:
                     relations_set.add(edgeLabel)
                     relations_map[edgeLabel] = relationId
@@ -58,12 +69,24 @@ def main(datafile):
 
             if fromNode not in entities_set:
                 entities_set.add(fromNode)
-                entities_map[fromNode] = identifier
+                if pagerank:
+                    if fromNode in pagerankMap:
+                        entities_map[fromNode] = (identifier, pagerankMap[fromNode])
+                    else:
+                        entities_map[fromNode] = (identifier, 0.0)
+                else:
+                    entities_map[fromNode] = identifier
                 identifier += 1
 
             if toNode not in entities_set:
                 entities_set.add(toNode)
-                entities_map[toNode] = identifier
+                if pagerank:
+                    if toNode in pagerankMap:
+                        entities_map[toNode] = (identifier, pagerankMap[toNode])
+                    else:
+                        entities_map[toNode] = (identifier, 0.0)
+                else:
+                    entities_map[toNode] = identifier
                 identifier += 1
 
         with open(datafile + '.entity.map', 'w') as fen:
@@ -73,11 +96,11 @@ def main(datafile):
         print ("# of identifiers (entities) = %d" % (identifier))
         for index, pair in enumerate(lines):
             parts = pair.split()
-            fromNode = parts[0]
-            toNode = parts[1]
+            fromNode = parts[index_of_subject]
+            toNode = parts[index_of_object]
             edgeLabel = 0
             if len(parts) > 2:
-                edgeLabel = parts[2]
+                edgeLabel = parts[index_of_predicate]
 
             fwalks.write(str(entities_map[fromNode]) + " " + str(entities_map[toNode]) + "\n")
 
@@ -111,7 +134,20 @@ def main(datafile):
 
 
 if __name__=='__main__':
-    if len(sys.argv) != 2:
+    if len(sys.argv) < 2 :
         print ("Snap file database (edge list) must be given as an argument.")
         sys.exit()
-    main(sys.argv[1])
+    spo = False
+    pagerankMap = {}
+    if (len(sys.argv) > 2):
+        if sys.argv[2] == "spo":
+            spo = True
+    if (len(sys.argv) > 3):
+        pagerankMapFile = sys.argv[3]
+        with open(pagerankMapFile, 'r') as fin:
+            lines = fin.readlines()
+            for line in lines:
+                entity, pagerank = line.split()
+                pagerankMap[entity] = pagerank
+
+    main(sys.argv[1], spo, pagerankMap)
