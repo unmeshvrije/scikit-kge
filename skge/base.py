@@ -42,78 +42,24 @@ np.random.seed(42)
 graph = ddict()
 
 
-def incoming_neighbours(entity, graph):
+def num_incoming_neighbours(entity, graph):
     all_lists = list(graph['incoming'][entity].values())
     incoming_neighbours = list(itertools.chain(*all_lists))
-    return incoming_neighbours
+    return len(incoming_neighbours)
 
-def outgoing_neighbours(entity, graph):
+def num_outgoing_neighbours(entity, graph):
     all_lists = list(graph['outgoing'][entity].values())
     outgoing_neighbours = list(itertools.chain(*all_lists))
-    return outgoing_neighbours
+    return len(outgoing_neighbours)
 
-def computeSimRank(level, e1, e2, graph, simRanks):
+def num_outgoing_relations(entity, graph):
+    all_relations = list(graph['outgoing'][entity].keys())
+    return len(all_relations)
 
-    #[float(0)] * SIM_RANK_K
-    for k in range(0, _SIM_RANK_K):
-        if k == 0:
-            score = float(1) if e1 == e2 else float(0)
-            simRanks[(e1, e2)].append(score)
-            if (k == level):
-                return score
-        else :
-            incoming_neighbours_e1 = incoming_neighbours(e1, graph)
-            incoming_neighbours_e2 = incoming_neighbours(e2, graph)
-            num_neighbours_e1 = len(incoming_neighbours_e1)
-            num_neighbours_e2 = len(incoming_neighbours_e2)
-            simRank = float(0)
-            for n1 in incoming_neighbours_e1:
-                for n2 in incoming_neighbours_e2:
-                    prevScore = computeSimRank(k-1, n1, n2, graph, simRanks)
-                    simRank += simRanks[(n1,n2)][k-1]
-                    #simRank += prevScore
+def num_incoming_relations(entity, graph):
+    all_relations = list(graph['incoming'][entity].keys())
+    return len(all_relations)
 
-            if num_neighbours_e1 == 0 or num_neighbours_e2 == 0:
-                score = 0
-            else:
-                score = (_SIM_RANK_C * simRank) / (len(incoming_neighbours_e1) * len(incoming_neighbours_e2))
-            simRanks[(e1,e2)].append(score)
-            if (k == level):
-                return score
-
-    return simRanks[(e1,e2)][-1]
-
-
-def simrank(G, N, r=0.8, max_iter=5):
-      # init. vars
-    sim_old = ddict(list)
-    sim = ddict(list)
-    for n in range(N):
-        sim[n] = ddict(int)
-        sim[n][n] = 1
-        sim_old[n] = ddict(int)
-        sim_old[n][n] = 0
-
-    # recursively calculate simrank
-    for iter_ctr in range(max_iter):
-        if _is_converge(sim, sim_old):
-            break
-        sim_old = copy.deepcopy(sim)
-        for u in range(N):
-            for v in range(N):
-                if u == v:
-                    continue
-                s_uv = 0.0
-                u_neighbours = incoming_neighbours(u, G)
-                v_neighbours = incoming_neighbours(v, G)
-                for n_u in u_neighbours:
-                    for n_v in v_neighbours:
-                        s_uv += sim_old[n_u][n_v]
-                if len(u_neighbours) == 0 or len(v_neighbours) == 0 :
-                    sim[u][v] = 0
-                else:
-                    sim[u][v] = (r * s_uv / (len(u_neighbours) * len(v_neighbours)))
-    return sim
 
 def _is_converge(s1, s2, eps=1e-4):
     for i in s1.keys():
@@ -139,6 +85,7 @@ class Experiment(object):
         self.parser.add_argument('--fout', type=str, help='Path to store model and results', default=None)
         self.parser.add_argument('--finfo', type=str, help='Path to store additional debug info', default=None)
         self.parser.add_argument('--fgrad', type=str, help='Path to store gradient vector updates for each entity', default=None)
+        self.parser.add_argument('--fpagerank', type=str, help='Path of the page ranks of all entities (in form of python dictionary)', default=None)
         self.parser.add_argument('--fembed', type=str, help='Path to store final embeddings for every entity and relation', default=None)
         self.parser.add_argument('--fin', type=str, help='Path to input data', default=None)
         self.parser.add_argument('--ftax', type=str, help='Path to the taxonomy file', default=None)
@@ -162,6 +109,7 @@ class Experiment(object):
         self.file_info = None
         if fi is not None:
             self.file_info = open(fi, "w")
+
 
         if self.args.mode == 'rank':
             self.callback = self.ranking_callback
@@ -204,7 +152,7 @@ class Experiment(object):
 
                 log.info("Computing positions and scores for TEST dataset...")
                 time_start = timeit.default_timer()
-                pos_t, fpos_t = self.ev_test.positions(trn.model, plot=plot)
+                pos_t, fpos_t = self.ev_test.positions(trn.model, plot=plot, pagerankMap=self.pagerankMap)
                 ranking_scores(self.fresult, pos_t, fpos_t, trn.epoch, 'TEST')
                 time_end = timeit.default_timer()
                 log.info("At epoch %d, Time spent in computing positions and scores for TEST dataset = %ds" % (trn.epoch, time_end - time_start))
@@ -350,6 +298,12 @@ class Experiment(object):
         outfile = dataset + "-" + size + "-" + strategy + "-epochs-" + str(epochs) + "-eval-" + str(ev) + "-margin-" + str(margin) + ".out"
         fresult = open(outfile, "w")
         self.fresult = fresult
+
+        self.pagerankMap = None
+        # If pagerank file is given, then extract the entity-pagerank map
+        if self.args.fpagerank is not None:
+            with open(self.args.fpagerank, 'r') as fp:
+                self.pagerankMap = eval(fp.read())
 
         global _FILE_TAIL_PREDICTIONS_UNFILTERED
         global _FILE_TAIL_PREDICTIONS_FILTERED
@@ -554,7 +508,7 @@ class FilteredRankingEval(object):
             else:
                 self.neval[p] = np.int(np.ceil(neval * len(sos) / len(xs)))
 
-    def positions(self, mdl, plot=False):
+    def positions(self, mdl, plot=False, pagerankMap=None):
         pos = {}
         fpos = {}
 
@@ -600,10 +554,17 @@ class FilteredRankingEval(object):
                 ppos['tail'].append(rank)
 
                 if plot:
-                    incoming = incoming_neighbours(o, graph)
-                    inDegree = len(incoming)
-                    with open(_FILE_TAIL_PREDICTIONS_UNFILTERED, 'a') as fplot:
-                        fplot.write("%d %d\n" % (inDegree, 1 if rank <= 10 else 2))
+                    inDegree_of_o = num_incoming_neighbours(o, graph)
+                    outDegree_of_o = num_outgoing_neighbours(o, graph)
+                    totalDegree_of_o = inDegree_of_o + outDegree_of_o
+                    inRelations = num_incoming_relations(o, graph)
+
+                    if pagerankMap:
+                        with open(_FILE_TAIL_PREDICTIONS_UNFILTERED, 'a') as fplot:
+                            fplot.write("%f %d %d %d\n" % (float(pagerankMap[o]) * 100000, 1 if rank <= 10 else 2, totalDegree_of_o, inRelations))
+                    else:
+                        with open(_FILE_TAIL_PREDICTIONS_UNFILTERED, 'a') as fplot:
+                            fplot.write("%d %d %d %d\n" % (inDegree_of_o, 1 if rank <= 10 else 2, totalDegree_of_o, inRelations))
                 # In the real data, for relation "P", which entities appear as objects for subject "S"
                 rm_idx = self.tt[p]['os'][s]
                 # rm_idx is the list of such entities
@@ -618,23 +579,34 @@ class FilteredRankingEval(object):
                 pfpos['tail'].append(rank)
 
                 if plot:
-                    with open(_FILE_TAIL_PREDICTIONS_FILTERED, 'a') as fplot:
-                        fplot.write("%d %d\n" % (inDegree, 1 if rank <= 10 else 2))
+                    if pagerankMap:
+                        with open(_FILE_TAIL_PREDICTIONS_FILTERED, 'a') as fplot:
+                            fplot.write("%f %d %d %d\n" % (float(pagerankMap[o]) * 100000, 1 if rank <= 10 else 2, totalDegree_of_o, inRelations))
+                    else:
+                        with open(_FILE_TAIL_PREDICTIONS_FILTERED, 'a') as fplot:
+                            fplot.write("%d %d %d %d\n" % (inDegree_of_o, 1 if rank <= 10 else 2, totalDegree_of_o, inRelations))
 
                 ################  HEAD predictions : Keep TAIL/OBJECT constant #######################
+
+
                 # Unfiltered scores: calculate scores with all entities and sort them
-
-
                 scores_s = self.scores_s(mdl, o, p).flatten()
                 sortidx_s = argsort(scores_s)[::-1]
                 rank = np.where(sortidx_s == s)[0][0] + 1
                 ppos['head'].append(rank)
 
                 if plot:
-                    outgoing = outgoing_neighbours(s, graph)
-                    outDegree = len(outgoing)
-                    with open(_FILE_HEAD_PREDICTIONS_UNFILTERED, 'a') as fplot:
-                        fplot.write("%d %d\n" % (outDegree, 1 if rank <= 10 else 2))
+                    outDegree_of_s = num_outgoing_neighbours(s, graph)
+                    inDegree_of_s= num_incoming_neighbours(s, graph)
+                    totalDegree_of_s = outDegree_of_s + inDegree_of_s
+                    outRelations = num_outgoing_relations(s, graph)
+                    # If pagerank file is provided, write the pagerank of the node instead of the degree
+                    if pagerankMap:
+                        with open(_FILE_HEAD_PREDICTIONS_UNFILTERED, 'a') as fplot:
+                            fplot.write("%f %d %d %d\n" % (float(pagerankMap[s]) * 100000, 1 if rank <= 10 else 2, totalDegree_of_s,  outRelations))
+                    else:
+                        with open(_FILE_HEAD_PREDICTIONS_UNFILTERED, 'a') as fplot:
+                            fplot.write("%d %d %d %d\n" % (outDegree_of_s, 1 if rank <= 10 else 2, totalDegree_of_s, outRelations))
 
                 rm_idx = self.tt[p]['ss'][o]
                 rm_idx = [i for i in rm_idx if i != s]
@@ -643,8 +615,13 @@ class FilteredRankingEval(object):
                 rank = np.where(sortidx_s == s)[0][0] + 1
                 pfpos['head'].append(rank)
                 if plot:
-                    with open(_FILE_HEAD_PREDICTIONS_FILTERED, 'a') as fplot:
-                        fplot.write("%d %d\n" % (outDegree, 1 if rank <= 10 else 2))
+                    # If pagerank file is provided, write the pagerank of the node instead of the degree
+                    if pagerankMap:
+                        with open(_FILE_HEAD_PREDICTIONS_FILTERED, 'a') as fplot:
+                            fplot.write("%f %d %d %d\n" % (float(pagerankMap[s]) * 100000, 1 if rank <= 10 else 2, totalDegree_of_s, outRelations))
+                    else:
+                        with open(_FILE_HEAD_PREDICTIONS_FILTERED, 'a') as fplot:
+                            fplot.write("%d %d %d %d\n" % (outDegree_of_s, 1 if rank <= 10 else 2, totalDegree_of_s,  outRelations))
             pos[p] = ppos
             fpos[p] = pfpos
 

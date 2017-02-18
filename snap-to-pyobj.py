@@ -39,6 +39,7 @@ def main(datafile, spo, pagerankMap):
         entities_set = set()
         relations_set = set()
         entities_map = {}
+        id_to_pagerank_map = {}
         relations_map = {}
         entities = "u'entities': ["
         relations = "u'relations':["
@@ -71,9 +72,11 @@ def main(datafile, spo, pagerankMap):
                 entities_set.add(fromNode)
                 if pagerank:
                     if fromNode in pagerankMap:
-                        entities_map[fromNode] = (identifier, pagerankMap[fromNode])
+                        entities_map[fromNode] = identifier
+                        id_to_pagerank_map[identifier] = pagerankMap[fromNode]
                     else:
-                        entities_map[fromNode] = (identifier, 0.0)
+                        entities_map[fromNode] = identifier
+                        id_to_pagerank_map[identifier] = 0.0
                 else:
                     entities_map[fromNode] = identifier
                 identifier += 1
@@ -82,15 +85,19 @@ def main(datafile, spo, pagerankMap):
                 entities_set.add(toNode)
                 if pagerank:
                     if toNode in pagerankMap:
-                        entities_map[toNode] = (identifier, pagerankMap[toNode])
+                        entities_map[toNode] = identifier
+                        id_to_pagerank_map[identifier] = pagerankMap[toNode]
                     else:
-                        entities_map[toNode] = (identifier, 0.0)
+                        entities_map[toNode] = identifier
+                        id_to_pagerank_map[identifier] = 0.0
                 else:
                     entities_map[toNode] = identifier
                 identifier += 1
 
         with open(datafile + '.entity.map', 'w') as fen:
             fen.write(str(entities_map))
+        with open(datafile + '.pagerank.map', 'w') as fen:
+            fen.write(str(id_to_pagerank_map))
 
         fwalks = open(datafile + '.0-based-entitiy-ids.edgelist', 'w')
         print ("# of identifiers (entities) = %d" % (identifier))
@@ -100,7 +107,7 @@ def main(datafile, spo, pagerankMap):
             toNode = parts[index_of_object]
             edgeLabel = 0
             if len(parts) > 2:
-                edgeLabel = parts[index_of_predicate]
+                edgeLabel = relations_map[parts[index_of_predicate]]
 
             fwalks.write(str(entities_map[fromNode]) + " " + str(entities_map[toNode]) + "\n")
 
