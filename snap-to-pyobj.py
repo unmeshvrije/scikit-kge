@@ -1,6 +1,7 @@
 import pickle, pprint
 import sys
 from random import shuffle
+import argparse
 #
 #relations
 #entities
@@ -9,7 +10,7 @@ from random import shuffle
 #test_subs
 #
 
-def main(datafile, spo, pagerankMap):
+def main(datafile, spo, pagerankMap, one_relation):
     index_of_subject = 0
     index_of_object = 1
     index_of_predicate = 2
@@ -61,7 +62,7 @@ def main(datafile, spo, pagerankMap):
             parts = pair.split()
             fromNode = parts[index_of_subject]
             toNode = parts[index_of_object]
-            if (len(parts) > 2):
+            if (len(parts) > 2) and not one_relation:
                 edgeLabel = parts[index_of_predicate]
                 if edgeLabel not in relations_set:
                     relations_set.add(edgeLabel)
@@ -106,7 +107,7 @@ def main(datafile, spo, pagerankMap):
             fromNode = parts[index_of_subject]
             toNode = parts[index_of_object]
             edgeLabel = 0
-            if len(parts) > 2:
+            if len(parts) > 2 and not one_relation:
                 edgeLabel = relations_map[parts[index_of_predicate]]
 
             fwalks.write(str(entities_map[fromNode]) + " " + str(entities_map[toNode]) + "\n")
@@ -128,7 +129,7 @@ def main(datafile, spo, pagerankMap):
             entities += "u'" + str(e) + "'," + "\n"
         entities += "],"
 
-        if len(relations_set) == 0:
+        if len(relations_set) == 0 or one_relation:
             relations += "u'related_to', u'fake'],\n"
         else:
             for r in relations_set:
@@ -141,20 +142,19 @@ def main(datafile, spo, pagerankMap):
 
 
 if __name__=='__main__':
-    if len(sys.argv) < 2 :
-        print ("Snap file database (edge list) must be given as an argument.")
-        sys.exit()
-    spo = False
+    parser = argparse.ArgumentParser(prog="SNAP to Python Object format converter", conflict_handler='resolve')
+    parser.add_argument('--fin', type=str, help = 'Path to the input file in SNAP (edgelist) format')
+    parser.add_argument('--spo', action='store_const', const=True, default=False, help = 'If the input file contains Subject-Predicate-Object format then use this option. Default is Subject-Object-Predicate')
+    parser.add_argument('--pagerank', type=str, help = 'Path of the pagerank file mapping')
+    parser.add_argument('--one-relation', action='store_const', const=True, default=False, help = 'If you want to exclude relation labels, use this option')
+    args = parser.parse_args()
     pagerankMap = {}
-    if (len(sys.argv) > 2):
-        if sys.argv[2] == "spo":
-            spo = True
-    if (len(sys.argv) > 3):
-        pagerankMapFile = sys.argv[3]
+    if args.pagerank:
+        pagerankMapFile = args.pagerank
         with open(pagerankMapFile, 'r') as fin:
             lines = fin.readlines()
             for line in lines:
                 entity, pagerank = line.split()
                 pagerankMap[entity] = pagerank
 
-    main(sys.argv[1], spo, pagerankMap)
+    main(args.fin, args.spo, pagerankMap, args.one_relation)
