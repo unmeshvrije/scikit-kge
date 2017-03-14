@@ -10,7 +10,7 @@ import argparse
 #test_subs
 #
 
-def main(datafile, spo, pagerankMap, one_relation):
+def main(datafile, spo, pagerankMap, one_relation, one_domain):
     index_of_subject = 0
     index_of_object = 1
     index_of_predicate = 2
@@ -49,6 +49,7 @@ def main(datafile, spo, pagerankMap, one_relation):
         valid = "u'valid_subs':["
 
         counter = 0
+        # Identifiers start from 1 not 0. If 0 appears as a relation label, then computing transition probabilities is erroneous for random walks
         identifier = 0
         relationId = 0
 
@@ -66,8 +67,12 @@ def main(datafile, spo, pagerankMap, one_relation):
                 edgeLabel = parts[index_of_predicate]
                 if edgeLabel not in relations_set:
                     relations_set.add(edgeLabel)
-                    relations_map[edgeLabel] = relationId
-                    relationId +=1
+                    if one_domain:
+                        relations_map[edgeLabel] = identifier
+                        identifier += 1
+                    else:
+                        relations_map[edgeLabel] = relationId
+                        relationId +=1
 
             if fromNode not in entities_set:
                 entities_set.add(fromNode)
@@ -95,8 +100,9 @@ def main(datafile, spo, pagerankMap, one_relation):
                     entities_map[toNode] = identifier
                 identifier += 1
 
+        reverse_entities_map = dict(zip(entities_map.values(), entities_map.keys()))
         with open(datafile + '.entity.map', 'w') as fen:
-            fen.write(str(entities_map))
+            fen.write(str(reverse_entities_map))
         with open(datafile + '.pagerank.map', 'w') as fen:
             fen.write(str(id_to_pagerank_map))
 
@@ -110,7 +116,7 @@ def main(datafile, spo, pagerankMap, one_relation):
             if len(parts) > 2 and not one_relation:
                 edgeLabel = relations_map[parts[index_of_predicate]]
 
-            fwalks.write(str(entities_map[fromNode]) + " " + str(entities_map[toNode]) + "\n")
+            fwalks.write(str(entities_map[fromNode]) + " " + str(entities_map[toNode]) + " " + str(edgeLabel) + "\n")
 
             if index < cntTraining-1:
                 trains += "(" + str(entities_map[fromNode]) + "," + str(entities_map[toNode]) + ","+str(edgeLabel)+"),\n"
@@ -147,6 +153,7 @@ if __name__=='__main__':
     parser.add_argument('--spo', action='store_const', const=True, default=False, help = 'If the input file contains Subject-Predicate-Object format then use this option. Default is Subject-Object-Predicate')
     parser.add_argument('--pagerank', type=str, help = 'Path of the pagerank file mapping')
     parser.add_argument('--one-relation', action='store_const', const=True, default=False, help = 'If you want to exclude relation labels, use this option')
+    parser.add_argument('--one-domain', action='store_const', const=True, default=False, help = 'If you want the same ID space (domain) for entities and relations, use this option')
     args = parser.parse_args()
     pagerankMap = {}
     if args.pagerank:
@@ -157,4 +164,4 @@ if __name__=='__main__':
                 entity, pagerank = line.split()
                 pagerankMap[entity] = pagerank
 
-    main(args.fin, args.spo, pagerankMap, args.one_relation)
+    main(args.fin, args.spo, pagerankMap, args.one_relation, args.one_domain)
