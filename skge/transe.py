@@ -23,7 +23,7 @@ class TransE(Model):
         log.info("l1 is %r " % (self.l1) )
 
     def _scores(self, ss, ps, os):
-        # This is the dissimilarity measure 'd' from the paper 
+        # This is the dissimilarity measure 'd' from the paper
         # Head + label and subtract Tail
         # h + l -t OR
         # subject + predicate - object

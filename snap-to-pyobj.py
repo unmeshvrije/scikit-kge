@@ -101,8 +101,11 @@ def main(datafile, spo, pagerankMap, one_relation, one_domain):
                 identifier += 1
 
         reverse_entities_map = dict(zip(entities_map.values(), entities_map.keys()))
+        reverse_relations_map = dict(zip(relations_map.values(), relations_map.keys()))
         with open(datafile + '.entity.map', 'w') as fen:
             fen.write(str(reverse_entities_map))
+        with open(datafile + '.relations.map', 'w') as frel:
+            frel.write(str(reverse_relations_map))
         with open(datafile + '.pagerank.map', 'w') as fen:
             fen.write(str(id_to_pagerank_map))
 
@@ -144,6 +147,7 @@ def main(datafile, spo, pagerankMap, one_relation, one_domain):
 
     data = "{\n" + entities + relations + trains + test + valid + "}"
     with open(datafile +'.pkl','w') as fout:
+        #pickle.dump(data, fout)
         fout.write(data)
 
 

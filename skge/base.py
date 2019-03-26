@@ -137,7 +137,7 @@ class Experiment(object):
 
             plot = False
             if trn.epoch == self.args.me:
-                log.info("PLOT ME\n")
+                #log.info("PLOT ME\n")
                 plot = True
 
             pos_v, fpos_v = self.ev_valid.positions(trn.model)
@@ -270,8 +270,10 @@ class Experiment(object):
 
     def train(self):
         # read data
-        with open(self.args.fin, 'rb') as fin:
-            data = pickle.load(fin)
+        #with open(self.args.fin, 'rb') as fin:
+        #    data = pickle.load(fin)
+        with open(self.args.fin, 'r') as fin:
+            data = eval(fin.read())
 
         N = len(data['entities'])
         #pdb.set_trace()
@@ -474,6 +476,7 @@ class Experiment(object):
             log.info("Time to fit model for 100%% samples (%d epochs) = %ds" % (trainer.max_epochs, time_end - time_start))
             self.fresult.write("Time to fit model for 100%% samples (%d epochs) = %ds\n" % (trainer.max_epochs, time_end - time_start))
         else:
+            #print ("UNM$$$ Using 100% data for training... #############")
             xs = data['train_subs']
             ys = np.ones(len(xs))
             time_start= timeit.default_timer()
@@ -515,7 +518,6 @@ class FilteredRankingEval(object):
         if hasattr(self, 'prepare_global'):
             self.prepare_global(mdl)
 
-        log.info("def position : Before For loop")
         count = 0
         for p, sos in self.idx.items():
             #pdb.set_trace()
@@ -538,15 +540,19 @@ class FilteredRankingEval(object):
                 # Add the embeddings of p to every entity of this model
                 self.prepare(mdl, p)
 
-            log.info("Prepared\n")
+            #log.info("Prepared\n")
             # For some reason, skip last tuple from all the tuples for relation 'P'
             # neval for every relation is -1
             # self.neval[p] will access the last element and we are skipping the last one by
             # array[:-1]
-            log.info("sos len = %d" % (len(sos)))
+            #log.info("sos len = %d" % (len(sos)))
             for s, o in sos:#[:self.neval[p]]:
                 count += 1
+                #print("UNM$$$ ********* score_o = ", self.scores_o(mdl, s, p))
+                #print("UNM$$$ ********* score_o = ", np.shape(self.scores_o(mdl, s, p)))
                 scores_o = self.scores_o(mdl, s, p).flatten()
+                #print("UNM$$$ @@@@@@@@ score_o = ", scores_o)
+                #print("UNM$$$ @@@@@@@@ shape(score_o) = ", np.shape(scores_o))
                 sortidx_o = argsort(scores_o)[::-1]
                 # Sort all the entities (As objects) and find out the index of the "O" in picture
                 # Store the index+1 in the ppos['tail]
@@ -819,11 +825,15 @@ class StochasticTrainer(object):
         # idx = [0,1,2,...., k] where len(xys) = k
         idx = np.arange(len(xys))
         #pdb.set_trace();
-        self.batch_size = np.ceil(len(xys) / self.nbatches)
+        #print("UNM$$$ len(xys) = ", len(xys))
+        self.batch_size = len(xys) // self.nbatches
+        #print (type(self.batch_size))
+        #print(type(xys))
         # A-range (start, stop, jump)
         # For batch size 10 and nbatches 100 and len(xys) = 1000
         # batch_idx = [10,20,30,40,....100,110,....990,1000]
         batch_idx = np.arange(self.batch_size, len(xys), self.batch_size)
+        #log.info ("UNM$$$ batch indexes : ", batch_idx)
         #pdb.set_trace()
         for self.epoch in range(1, self.max_epochs + 1):
             # shuffle training examples
@@ -838,6 +848,7 @@ class StochasticTrainer(object):
             # batch_idx contains [1414, 2828, 4242, 5656, 7070,...]
             # Thus, batch will contain array of 1414 elements each time
             # entities with ids 0-1413, 1414-2827, 2828-4241 etc.
+            #log.info("%d) " % self.epoch)
             for batch in np.split(idx, batch_idx):
                 '''
                 xys is array of tuple pairs as follows
@@ -852,6 +863,7 @@ class StochasticTrainer(object):
                 xys[index][0] will access the triplet.
                 xys[index][0][0] will access the subject entity.
                 '''
+                #log.info("length of minibatch[%d] " % len(batch))
                 bxys = [xys[z] for z in batch]
                 self._process_batch(bxys)
 
@@ -967,12 +979,18 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         pxs = []
         nxs = []
 
+        #print ("UNM$$$ process batch of PairWise Stochastic Learner: ", len(xys), " : " , xys[0])
         for xy in xys:
 
             # samplef is RandomModeSampler
             if self.samplef is not None:
-                # Change head or tail of the tuple (H, T, R)
-                # This code introduces the entities that were not originally present in any tuples (in case of T% of tuples processing)
+                '''
+                Change head or tail of the tuple (H, T, R)
+                This code introduces the entities that were not originally present in any tuples
+                (in case of T% of tuples processing)
+                In other words, it adds 2 negative tuples for every positive tuple
+                Why 2 : That's how RandomModeSampler works
+                '''
                 for nx in self.samplef([xy]):
                     pxs.append(xy)
                     nxs.append(nx)
@@ -982,14 +1000,18 @@ class PairwiseStochasticTrainer(StochasticTrainer):
 
         # take step for batch
         if hasattr(self.model, '_prepare_batch_step'):
+            # Not set
             self.model._prepare_batch_step(pxs, nxs)
         #pdb.set_trace()
+        #print("UNM$$$ Calling pairwise gradient of HolE : ")
+        #print ("UNM$$$ pxs shape = {} , nxs shape = {}".format(np.shape(pxs), np.shape(nxs)))
         grads = self.model._pairwise_gradients(pxs, nxs)
 
         #pdb.set_trace()
         # update if examples violate margin
         if grads is not None:
             self.nviolations += self.model.nviolations
+            #print("UNM$$$ calling _batch_step()")
             self._batch_step(grads)
 
 

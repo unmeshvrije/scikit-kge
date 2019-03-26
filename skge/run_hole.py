@@ -10,7 +10,9 @@ from skge import activation_functions as afs
 class HolEEval(FilteredRankingEval):
 
     def prepare(self, mdl, p):
+        #print ("UNM$$$ ####### shape(mdl.E) : {} , shape(mdl.R[p]) = {} ".format(np.shape(mdl.E), np.shape(mdl.R[p])))
         self.ER = ccorr(mdl.R[p], mdl.E)
+        #print ("UNM$$$ &&&&&&&&&&&  shape(self.ER) = ", np.shape(self.ER))
 
     def scores_o(self, mdl, s, p):
         return np.dot(self.ER, mdl.E[s])
@@ -46,6 +48,7 @@ class ExpHolE(Experiment):
                 samplef=sampler.sample
             )
         else:
+            #print ("UNM$$$ Running Pairwise stochastic trainer")
             trainer = PairwiseStochasticTrainer(
                 model,
                 nbatches=self.args.nb,

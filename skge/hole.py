@@ -3,7 +3,7 @@ from skge.base import Model
 from skge.util import grad_sum_matrix, unzip_triples, ccorr, cconv
 from skge.param import normless1
 import skge.actfun as af
-
+import timeit
 
 class HolE(Model):
 
@@ -17,6 +17,11 @@ class HolE(Model):
         self.add_param('R', (self.sz[2], self.ncomp))
 
     def _scores(self, ss, ps, os):
+        #print ("UNM$$ ss = {}, ps = {}, os = {}".format(ss, ps, os))
+        #print ("UNM$$ ps shape = {}", np.shape(ps))
+        #print ("UNM$$ ss shape = {}", np.shape(ss))
+        #print ("UNM$$ R[ps],shape = {}", np.shape(self.R[ps]));
+        #print ("UNM$$ E[ss],shape = {}", np.shape(self.E[ss]));
         return np.sum(self.R[ps] * ccorr(self.E[ss], self.E[os]), axis=1)
 
     def _gradients(self, xys):
@@ -44,12 +49,15 @@ class HolE(Model):
     def _pairwise_gradients(self, pxs, nxs):
         # indices of positive examples
         sp, pp, op = unzip_triples(pxs)
+        #print ("UNM$$$ sp : {}, pp = {} , op = {}".format(sp, pp, op))
         # indices of negative examples
         sn, pn, on = unzip_triples(nxs)
+        #print ("UNM$$$ sn : {}, pn = {} , on = {}".format(sn, pn, on))
 
         pscores = self.af.f(self._scores(sp, pp, op))
         nscores = self.af.f(self._scores(sn, pn, on))
 
+        #print("UNM$$$ positive and negative samples total = ", len(pxs) + len(nxs))
         #print("avg = %f/%f, min = %f/%f, max = %f/%f" % (pscores.mean(), nscores.mean(), pscores.min(), nscores.min(), pscores.max(), nscores.max()))
 
         # find examples that violate margin
@@ -62,19 +70,34 @@ class HolE(Model):
         sp, sn = list(sp[ind]), list(sn[ind])
         op, on = list(op[ind]), list(on[ind])
         pp, pn = list(pp[ind]), list(pn[ind])
+        # Increase dimension of scores by one and store it as column (np.newaxis)
         gpscores = -self.af.g_given_f(pscores[ind])[:, np.newaxis]
         gnscores = self.af.g_given_f(nscores[ind])[:, np.newaxis]
 
         # object role gradients
         ridx, Sm, n = grad_sum_matrix(pp + pn)
+        start_ccorr = timeit.default_timer()
+        ccorr(self.E[sp], self.E[op])
+        elapsed_ccorr = timeit.default_timer() - start_ccorr
+        #print("time to compute ccorr = %f us" % (elapsed_ccorr * 1000 * 1000))
+        #print ("shapes : ", self.E[sp].shape)
         grp = gpscores * ccorr(self.E[sp], self.E[op])
         grn = gnscores * ccorr(self.E[sn], self.E[on])
         #gr = (Sm.dot(np.vstack((grp, grn))) + self.rparam * self.R[ridx]) / n
+
+        # Because of dot product the gradient is calculated sum of n terms that were non-zero
+        # Therefore, for the correct value, we should divide by n
         gr = Sm.dot(np.vstack((grp, grn))) / n
         gr += self.rparam * self.R[ridx]
 
         # filler gradients
         eidx, Sm, n = grad_sum_matrix(sp + sn + op + on)
+
+        start_ccorr = timeit.default_timer()
+        cconv(self.E[sp], self.R[pp])
+        elapsed_ccorr = timeit.default_timer() - start_ccorr
+        #print("time to compute cconv = %f us" % (elapsed_ccorr * 1000 * 1000))
+
         geip = gpscores * ccorr(self.R[pp], self.E[op])
         gein = gnscores * ccorr(self.R[pn], self.E[on])
         gejp = gpscores * cconv(self.E[sp], self.R[pp])
