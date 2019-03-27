@@ -25,7 +25,7 @@ class ExpHolE(Experiment):
 
     def __init__(self):
         super(ExpHolE, self).__init__()
-        self.parser.add_argument('--ncomp', type=int, help='Number of latent components')
+        self.parser.add_argument('--ncomp', type=int, help='Number of latent components (dimensions)')
         self.parser.add_argument('--rparam', type=float, help='Regularization for W', default=0)
         self.parser.add_argument('--afs', type=str, default='sigmoid', help='Activation function')
         self.evaluator = HolEEval

@@ -33,7 +33,7 @@ class ExpTransE(Experiment):
 
     def __init__(self):
         super(ExpTransE, self).__init__()
-        self.parser.add_argument('--ncomp', type=int, help='Number of latent components')
+        self.parser.add_argument('--ncomp', type=int, help='Number of latent components (dimensions)')
         self.evaluator = TransEEval
 
     def setup_trainer(self, sz, sampler):

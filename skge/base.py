@@ -14,6 +14,10 @@ from skge import sample
 from skge.util import to_tensor
 import copy
 import itertools
+import sys
+from enum import Enum
+from subgraphs import Subgraphs
+SUBTYPE = Enum('SUBTYPE', 'SPO POS')
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger('EX-KG')
@@ -96,9 +100,72 @@ class Experiment(object):
         self.parser.add_argument('--mode', type=str, default='rank')
         self.parser.add_argument('--sampler', type=str, default='random-mode')
         self.parser.add_argument('--norm', type=str, default='l1', help=' Normalization (l1(default) or l2)')
+
+        self.parser.add_argument('--subgraphs', type=bool, help='Whether to test with subgraphs or not', default=False)
+        self.parser.add_argument('--minsubsize', type=int, help='Minimum subgraph size', default=50)
+        self.parser.add_argument('--topk', type=int, help='Number of top subgraphs to check for evaluation', default=5)
+        self.parser.add_argument('--subtypemake', type=str, help='Type of subgraph to create', default="avg")
+        self.parser.add_argument('--subdistance', type=str, help='Distance function to evaluate subgraphs on', default="avg")
         self.neval = -1
         self.best_valid_score = -1.0
         self.exectimes = []
+        self.subgraphs = Subgraphs()
+        self.avg_embeddings = []
+        self.var_embeddings = []
+
+    def make_subgraphs(self, subType, sorted_triples, mincard, trn):
+        similar_entities = []
+        current = np.zeros(self.args.ncomp, dtype=np.float64)
+        count = 0
+        prevo = -1
+        prevp = -1
+        for triple in sorted_triples:
+            sub = triple[0]
+            obj = triple[1]
+            rel = triple[2]
+            ent = -1
+            other_ent = -1
+            if subType == SUBTYPE.POS:
+                ent = obj
+                other_ent = sub
+            else:
+                #print ("subtype = " , subType)
+                ent = sub
+                other_ent = obj
+            if ent != prevo or rel != prevp:
+                if count > mincard:
+                    mean = current/count
+                    self.avg_embeddings.append(mean)
+                    columnsSquareDiff = 0
+                    for se in similar_entities:
+                        columnsSquareDiff += (trn.model.E[se] - mean) * (trn.model.E[se] - mean)
+                    if count > 2:
+                        columnsSquareDiff /= (count-1)
+                    self.var_embeddings.append(columnsSquareDiff)
+                    # add subgraph
+                    self.subgraphs.add_subgraphs(subType, prevo, prevp, count)
+                #else:
+                #    print("count = ", count , " for ", str(prevo) , " : " , str(prevp))
+                count = 0
+                prevo = ent
+                prevp = rel
+                current.fill(0.0)
+                similar_entities.clear()
+            count += 1
+            current += trn.model.E[other_ent]
+            similar_entities.append(other_ent)
+        # After looping over all triples, add remaining entities to a subgraph
+        if count > mincard:
+            self.avg_embeddings.append(current/count)
+            columnsSquareDiff = 0
+            for se in similar_entities:
+                columnsSquareDiff += (trn.model.E[se] - mean) * (trn.model.E[se] - mean)
+            if count > 2:
+                columnsSquareDiff /= (count-1)
+            self.var_embeddings.append(columnsSquareDiff)
+            # add subgraph
+            self.subgraphs.add_subgraphs(subType, prevo, prevp, count)
+        print ("# of subgraphs : " , self.subgraphs.get_Nsubgraphs())
 
     def run(self, *args, **kwargs):
         # parse comandline arguments
@@ -242,7 +309,26 @@ class Experiment(object):
             self.args)
         )
         trn.fit(xs, ys)
-        self.callback(trn, with_eval=True)
+        # TODO: Make subgraphs
+        # each x in xs is a tuple (SUB, OBJ, PREDicate)
+        print ("Trying to make subgraphs...")
+        mincard = self.args.minsubsize
+        topk    = self.args.topk
+        subalgo = self.args.subtypemake
+
+        sorted_po = sorted(xs, key=lambda l : (l[2], l[1]))
+        print ("calling with type = ", SUBTYPE.POS)
+        self.make_subgraphs(SUBTYPE.POS, sorted_po, mincard, trn)
+
+        sorted_ps = sorted(xs, key=lambda l : (l[2], l[0]))
+        print ("calling with type = ", SUBTYPE.SPO)
+        self.make_subgraphs(SUBTYPE.SPO, sorted_ps, mincard, trn)
+
+        #print (triple)
+        #print ("dimensions = ", self.args.ncomp)
+        #print ("# of triples = ", len(sorted_po))
+
+        #self.callback(trn, with_eval=True)
         return trn
 
     def make_graph(self, triples, N, M):
@@ -926,7 +1012,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         if fg is not None:
             self.file_gradients = open(fg, "w")
         if fe is not None:
-            self.file_embeddings = open(fe, "w") 
+            self.file_embeddings = open(fe, "w")
             #self.pickle_file_embeddings = open(fe+".bin", "wb")
 
     def fit(self, xs, ys):
