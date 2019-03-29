@@ -15,6 +15,7 @@ from skge.util import to_tensor
 import copy
 import itertools
 import sys
+from skge.util import ccorr
 from enum import Enum
 from subgraphs import Subgraphs
 SUBTYPE = Enum('SUBTYPE', 'SPO POS')
@@ -113,7 +114,7 @@ class Experiment(object):
         self.avg_embeddings = []
         self.var_embeddings = []
 
-    def make_subgraphs(self, subType, sorted_triples, mincard, trn):
+    def make_subgraphs(self, subType, sorted_triples, mincard, trn, subAlgo):
         similar_entities = []
         current = np.zeros(self.args.ncomp, dtype=np.float64)
         count = 0
@@ -143,7 +144,8 @@ class Experiment(object):
                         columnsSquareDiff /= (count-1)
                     self.var_embeddings.append(columnsSquareDiff)
                     # add subgraph
-                    self.subgraphs.add_subgraphs(subType, prevo, prevp, count)
+                    self.subgraphs.add_subgraphs(subType, prevo, prevp, count, similar_entities)
+                    #print(similar_entities)
                 #else:
                 #    print("count = ", count , " for ", str(prevo) , " : " , str(prevp))
                 count = 0
@@ -164,8 +166,14 @@ class Experiment(object):
                 columnsSquareDiff /= (count-1)
             self.var_embeddings.append(columnsSquareDiff)
             # add subgraph
-            self.subgraphs.add_subgraphs(subType, prevo, prevp, count)
+            self.subgraphs.add_subgraphs(subType, prevo, prevp, count, similar_entities)
         print ("# of subgraphs : " , self.subgraphs.get_Nsubgraphs())
+        # for subgraphs
+        trn.model.add_param('S', (self.subgraphs.get_Nsubgraphs(), self.args.ncomp))
+        if subAlgo == "avg":
+            trn.model.S = self.avg_embeddings
+        elif subAlgo == "var":
+            trn.model.S = self.var_embeddings
 
     def run(self, *args, **kwargs):
         # parse comandline arguments
@@ -186,6 +194,15 @@ class Experiment(object):
         else:
             raise ValueError('Unknown experiment mode (%s)' % self.args.mode)
         self.train()
+
+    def subgraph_callback(self, trn):
+        #TODO: use subgraphs to find ranks, scores
+        log.info("Computing SUBGRAPH positions and scores for TEST dataset...")
+        time_start = timeit.default_timer()
+        pos_t = self.ev_test.subgraph_positions(trn.model, self.subgraphs.subgraphs)
+        #subgraph_ranking_scores(self.fresult, pos_t, trn.epoch, 'TEST')
+        time_end = timeit.default_timer()
+        log.info("At epoch %d, Time spent in computing SUBGRAPH positions and scores for TEST dataset = %ds" % (trn.epoch, time_end - time_start))
 
     def ranking_callback(self, trn, with_eval=False):
         # print basic info
@@ -309,25 +326,25 @@ class Experiment(object):
             self.args)
         )
         trn.fit(xs, ys)
-        # TODO: Make subgraphs
         # each x in xs is a tuple (SUB, OBJ, PREDicate)
         print ("Trying to make subgraphs...")
         mincard = self.args.minsubsize
         topk    = self.args.topk
-        subalgo = self.args.subtypemake
+        subAlgo = self.args.subtypemake
 
         sorted_po = sorted(xs, key=lambda l : (l[2], l[1]))
         print ("calling with type = ", SUBTYPE.POS)
-        self.make_subgraphs(SUBTYPE.POS, sorted_po, mincard, trn)
+        self.make_subgraphs(SUBTYPE.POS, sorted_po, mincard, trn, subAlgo)
 
         sorted_ps = sorted(xs, key=lambda l : (l[2], l[0]))
         print ("calling with type = ", SUBTYPE.SPO)
-        self.make_subgraphs(SUBTYPE.SPO, sorted_ps, mincard, trn)
+        self.make_subgraphs(SUBTYPE.SPO, sorted_ps, mincard, trn, subAlgo)
 
         #print (triple)
         #print ("dimensions = ", self.args.ncomp)
         #print ("# of triples = ", len(sorted_po))
 
+        self.subgraph_callback(trn)
         #self.callback(trn, with_eval=True)
         return trn
 
@@ -596,6 +613,31 @@ class FilteredRankingEval(object):
                 self.neval[p] = -1
             else:
                 self.neval[p] = np.int(np.ceil(neval * len(sos) / len(xs)))
+
+    def subgraph_positions(self, mdl, subgraphs):
+        pos = {}
+        # do equivalent of self.prepare_global(mdl)
+        count = 0
+        for p, sos in self.idx.items():
+            # dictionary with 'tail' as the key, will store positions of H after keeping T and P constant
+            ppos = {'head': [], 'tail': []}
+
+            # do self.prepare(mdl, p ) # calcualte ccorr(p , all subgraphs)
+            # mdl.S should contain all subgraph embeddings
+            SR = ccorr(mdl.R[p], mdl.S)
+            for s, o in sos:#[:self.neval[p]]:
+                count += 1
+                scores_o = np.dot(SR, mdl.E[s]).flatten()
+                #scores_o should contain scores for each subgraph using dot product
+                sortidx_o = argsort(scores_o)#[::-1]
+                # sortidx_o has the indices for sorted subgraph scores
+                # Choose topk from this and find out if the answer lies in any of these subgraphs
+                for rank, index in enumerate(sortidx_o):
+                    if o in subgraphs[index].entities:
+                        break
+
+                print ("For ", str(s) , ", ", str(p), " subgraph rank(o) = " , rank)
+                ppos['tail'].append(rank)
 
     def positions(self, mdl, plot=False, pagerankMap=None):
         pos = {}
