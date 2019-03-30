@@ -120,6 +120,8 @@ class Experiment(object):
         count = 0
         prevo = -1
         prevp = -1
+        subgraph_logfile="subgraphs-test.log"
+        file_data = ""
         for triple in sorted_triples:
             sub = triple[0]
             obj = triple[1]
@@ -145,6 +147,8 @@ class Experiment(object):
                     self.var_embeddings.append(columnsSquareDiff)
                     # add subgraph
                     self.subgraphs.add_subgraphs(subType, prevo, prevp, count, similar_entities)
+                    for se in similar_entities:
+                        file_data += str(se) + "\n"
                     #print(similar_entities)
                 #else:
                 #    print("count = ", count , " for ", str(prevo) , " : " , str(prevp))
@@ -168,12 +172,8 @@ class Experiment(object):
             # add subgraph
             self.subgraphs.add_subgraphs(subType, prevo, prevp, count, similar_entities)
         print ("# of subgraphs : " , self.subgraphs.get_Nsubgraphs())
-        # for subgraphs
-        trn.model.add_param('S', (self.subgraphs.get_Nsubgraphs(), self.args.ncomp))
-        if subAlgo == "avg":
-            trn.model.S = self.avg_embeddings
-        elif subAlgo == "var":
-            trn.model.S = self.var_embeddings
+        with open(subgraph_logfile, "w") as fout:
+            fout.write(file_data)
 
     def run(self, *args, **kwargs):
         # parse comandline arguments
@@ -332,14 +332,21 @@ class Experiment(object):
         topk    = self.args.topk
         subAlgo = self.args.subtypemake
 
-        sorted_po = sorted(xs, key=lambda l : (l[2], l[1]))
-        print ("calling with type = ", SUBTYPE.POS)
-        self.make_subgraphs(SUBTYPE.POS, sorted_po, mincard, trn, subAlgo)
 
         sorted_ps = sorted(xs, key=lambda l : (l[2], l[0]))
-        print ("calling with type = ", SUBTYPE.SPO)
+        #print ("calling with type = ", SUBTYPE.SPO)
+        print(sorted_ps)
         self.make_subgraphs(SUBTYPE.SPO, sorted_ps, mincard, trn, subAlgo)
 
+        sorted_po = sorted(xs, key=lambda l : (l[2], l[1]))
+        #print ("calling with type = ", SUBTYPE.POS)
+        self.make_subgraphs(SUBTYPE.POS, sorted_po, mincard, trn, subAlgo)
+
+        trn.model.add_param('S', (self.subgraphs.get_Nsubgraphs(), self.args.ncomp))
+        if subAlgo == "avg":
+            trn.model.S = self.avg_embeddings
+        elif subAlgo == "var":
+            trn.model.S = self.var_embeddings
         #print (triple)
         #print ("dimensions = ", self.args.ncomp)
         #print ("# of triples = ", len(sorted_po))
@@ -384,6 +391,8 @@ class Experiment(object):
         sz = (N, N, M)
 
         true_triples = data['train_subs'] + data['test_subs'] + data['valid_subs']
+        test_triples = data['test_subs']
+
         if self.args.mode == 'rank':
             self.ev_test = self.evaluator(data['test_subs'], true_triples, self.neval)
             self.ev_valid = self.evaluator(data['valid_subs'], true_triples, self.neval)
@@ -618,6 +627,9 @@ class FilteredRankingEval(object):
         pos = {}
         # do equivalent of self.prepare_global(mdl)
         count = 0
+        sumTailRanks = 0
+        sumHeadRanks = 0
+        total = 0
         for p, sos in self.idx.items():
             # dictionary with 'tail' as the key, will store positions of H after keeping T and P constant
             ppos = {'head': [], 'tail': []}
@@ -628,16 +640,43 @@ class FilteredRankingEval(object):
             for s, o in sos:#[:self.neval[p]]:
                 count += 1
                 scores_o = np.dot(SR, mdl.E[s]).flatten()
+                #print(scores_o)
                 #scores_o should contain scores for each subgraph using dot product
-                sortidx_o = argsort(scores_o)#[::-1]
+                sortidx_o = argsort(scores_o)[::-1]
                 # sortidx_o has the indices for sorted subgraph scores
                 # Choose topk from this and find out if the answer lies in any of these subgraphs
+                found = False
                 for rank, index in enumerate(sortidx_o):
                     if o in subgraphs[index].entities:
+                        found = True
                         break
 
-                print ("For ", str(s) , ", ", str(p), " subgraph rank(o) = " , rank)
+                sumTailRanks += rank
+                if False == found:
+                    print ("For ", str(s) , ", ", str(p), " subgraph rank(o) = " , rank, " expected o = ", o)
                 ppos['tail'].append(rank)
+
+                # TODO: this score calculation is not accurate
+                ocrr = ccorr(mdl.R[p], mdl.E[o])
+                scores_s = np.dot(SR, ocrr).flatten()
+                #print(scores_s)
+                #scores_o should contain scores for each subgraph using dot product
+                sortidx_s = argsort(scores_s)[::-1]
+                # sortidx_o has the indices for sorted subgraph scores
+                # Choose topk from this and find out if the answer lies in any of these subgraphs
+                found = False
+                for rank, index in enumerate(sortidx_s):
+                    if s in subgraphs[index].entities:
+                        found = True
+                        break
+
+                sumHeadRanks += rank
+                total += 1
+                if False == found:
+                    print ("For ", str(o) , ", ", str(p), " subgraph rank(s) = " , rank, " expected s = ", s)
+                ppos['head'].append(rank)
+        print("Mean tail rank = ", sumTailRanks / total)
+        print("Mean head rank = ", sumHeadRanks / total)
 
     def positions(self, mdl, plot=False, pagerankMap=None):
         pos = {}
