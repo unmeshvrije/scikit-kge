@@ -18,6 +18,7 @@ import sys
 from skge.util import ccorr
 from enum import Enum
 from subgraphs import Subgraphs
+import trident
 SUBTYPE = Enum('SUBTYPE', 'SPO POS')
 
 logging.basicConfig(level=logging.DEBUG)
@@ -199,8 +200,8 @@ class Experiment(object):
         #TODO: use subgraphs to find ranks, scores
         log.info("Computing SUBGRAPH positions and scores for TEST dataset...")
         time_start = timeit.default_timer()
-        pos_t = self.ev_test.subgraph_positions(trn.model, self.subgraphs.subgraphs)
-        #subgraph_ranking_scores(self.fresult, pos_t, trn.epoch, 'TEST')
+        pos_test = self.ev_test.subgraph_positions(trn.model, self.subgraphs.subgraphs)
+        subgraph_ranking_scores(self.fresult, pos_test, trn.epoch, 'TEST')
         time_end = timeit.default_timer()
         log.info("At epoch %d, Time spent in computing SUBGRAPH positions and scores for TEST dataset = %ds" % (trn.epoch, time_end - time_start))
 
@@ -335,7 +336,7 @@ class Experiment(object):
 
         sorted_ps = sorted(xs, key=lambda l : (l[2], l[0]))
         #print ("calling with type = ", SUBTYPE.SPO)
-        print(sorted_ps)
+        #print(sorted_ps)
         self.make_subgraphs(SUBTYPE.SPO, sorted_ps, mincard, trn, subAlgo)
 
         sorted_po = sorted(xs, key=lambda l : (l[2], l[1]))
@@ -344,7 +345,12 @@ class Experiment(object):
 
         trn.model.add_param('S', (self.subgraphs.get_Nsubgraphs(), self.args.ncomp))
         if subAlgo == "avg":
+            #print(np.shape(trn.model.S))
+            #print(len(trn.model.S))
             trn.model.S = self.avg_embeddings
+            #for sube in trn.model.S:
+            #    print(type(sube) , " :" , sube)
+            #print(type(self.avg_embeddings) , " : " , self.avg_embeddings[self.subgraphs.get_Nsubgraphs()-1])
         elif subAlgo == "var":
             trn.model.S = self.var_embeddings
         #print (triple)
@@ -378,27 +384,59 @@ class Experiment(object):
         return {'left' : -1, 'right' : -1}
         #raise ValueError("Entity %d should not exist" % (entity))
 
+
     def train(self):
         # read data
         #with open(self.args.fin, 'rb') as fin:
         #    data = pickle.load(fin)
-        with open(self.args.fin, 'r') as fin:
-            data = eval(fin.read())
 
-        N = len(data['entities'])
+        file_path = self.args.fin
+        trident_db            = trident.Db(file_path)
+        batch_size             = 1000
+        percent_valid_triples = 0.01
+        percent_test_triples  = 0.01
+        if trident_db.n_triples() < 1000:
+            batch_size = 100
+        batcher = trident.Batcher(file_path, batch_size, 1, percent_valid_triples, percent_test_triples)
+        N = trident_db.n_terms()
+        M = trident_db.n_relations()
+
+        #N = len(data['entities'])
         #pdb.set_trace()
-        M = len(data['relations'])
+        #M = len(data['relations'])
         sz = (N, N, M)
 
-        true_triples = data['train_subs'] + data['test_subs'] + data['valid_subs']
-        test_triples = data['test_subs']
+        if file_path[-1] != '/':
+            file_path = file_path + "/"
+        train_triples_series = batcher.load_triples(file_path+"_batch")
+        valid_triples_series = batcher.load_triples(file_path+"_batch_valid")
+        test_triples_series  = batcher.load_triples(file_path+"_batch_test")
+
+        def parse_triples_series(series):
+            s_list = [int(x) for x in series[::3]]
+            p_list = [int(x) for x in series[1::3]]
+            o_list = [int(x) for x in series[2::3]]
+            result = []
+            for s,p,o in zip(s_list, p_list, o_list):
+                # Note that we are returing SUB,OBJ, PRED
+                result.append((s,o,p))
+            return result
+
+        train_triples = parse_triples_series(train_triples_series)
+        valid_triples = parse_triples_series(valid_triples_series)
+        test_triples  = parse_triples_series(test_triples_series)
+        print (type(train_triples))
+        print (len(train_triples))
+        #true_triples = data['train_subs'] + data['test_subs'] + data['valid_subs']
+        #test_triples = data['test_subs']
+        true_triples = train_triples + test_triples + valid_triples
 
         if self.args.mode == 'rank':
-            self.ev_test = self.evaluator(data['test_subs'], true_triples, self.neval)
-            self.ev_valid = self.evaluator(data['valid_subs'], true_triples, self.neval)
-        elif self.args.mode == 'lp':
-            self.ev_test = self.evaluator(data['test_subs'], data['test_labels'])
-            self.ev_valid = self.evaluator(data['valid_subs'], data['valid_labels'])
+            self.ev_test = self.evaluator(test_triples, true_triples, self.neval)
+            self.ev_valid = self.evaluator(valid_triples,true_triples, self.neval)
+        #elif self.args.mode == 'lp':
+        #    self.ev_test = self.evaluator(data['test_subs'], data['test_labels'])
+        #    self.ev_valid = self.evaluator(data['valid_subs'], data['valid_labels'])
 
         # Construct a name for the result file
         # <dataset>-<size of training>-<strategy>-epochs-<number of epochs>-eval-<Evaluate after X epochs>-margin-<margin>.out
@@ -439,12 +477,13 @@ class Experiment(object):
             fplot.write("")
 
         # Make a graph from edges in training triples.
-        graph_start = timeit.default_timer()
+        #graph_start = timeit.default_timer()
         global graph
-        graph = self.make_graph(data['train_subs'], N, M)
-        graph_end = timeit.default_timer()
-        log.info("Time to build the graph = %ds" %(graph_end - graph_start))
-        self.fresult.write("Time to build the graph = %ds\n" %(graph_end - graph_start))
+        # TODO: for graph use dynamic dict instead of list
+        #graph = self.make_graph(train_triples, N, M)
+        #graph_end = timeit.default_timer()
+        #log.info("Time to build the graph = %ds" %(graph_end - graph_start))
+        #self.fresult.write("Time to build the graph = %ds\n" %(graph_end - graph_start))
 
         #sim_start = timeit.default_timer()
         #sim = simrank(graph, N)
@@ -589,7 +628,7 @@ class Experiment(object):
             self.fresult.write("Time to fit model for 100%% samples (%d epochs) = %ds\n" % (trainer.max_epochs, time_end - time_start))
         else:
             #print ("UNM$$$ Using 100% data for training... #############")
-            xs = data['train_subs']
+            xs = train_triples
             ys = np.ones(len(xs))
             time_start= timeit.default_timer()
             trainer = self.fit_model(xs, ys, sz)
@@ -630,6 +669,8 @@ class FilteredRankingEval(object):
         sumTailRanks = 0
         sumHeadRanks = 0
         total = 0
+        failfile = "failed.log"
+        data = ""
         for p, sos in self.idx.items():
             # dictionary with 'tail' as the key, will store positions of H after keeping T and P constant
             ppos = {'head': [], 'tail': []}
@@ -647,16 +688,18 @@ class FilteredRankingEval(object):
                 # Choose topk from this and find out if the answer lies in any of these subgraphs
                 found = False
                 for rank, index in enumerate(sortidx_o):
+                    #print("index = ", index)
+                    #print (subgraphs[index].entities)
                     if o in subgraphs[index].entities:
                         found = True
                         break
 
                 sumTailRanks += rank
                 if False == found:
+                    data += str(o) + "\n"
                     print ("For ", str(s) , ", ", str(p), " subgraph rank(o) = " , rank, " expected o = ", o)
                 ppos['tail'].append(rank)
 
-                # TODO: this score calculation is not accurate
                 ocrr = ccorr(mdl.R[p], mdl.E[o])
                 scores_s = np.dot(SR, ocrr).flatten()
                 #print(scores_s)
@@ -673,10 +716,16 @@ class FilteredRankingEval(object):
                 sumHeadRanks += rank
                 total += 1
                 if False == found:
+                    data += str(s) + "\n"
                     print ("For ", str(o) , ", ", str(p), " subgraph rank(s) = " , rank, " expected s = ", s)
                 ppos['head'].append(rank)
+            pos[p] = ppos
+
         print("Mean tail rank = ", sumTailRanks / total)
         print("Mean head rank = ", sumHeadRanks / total)
+        with open(failfile, "w") as fout:
+            fout.write(data)
+        return pos
 
     def positions(self, mdl, plot=False, pagerankMap=None):
         pos = {}
@@ -830,6 +879,19 @@ def ranking_scores(fresult, pos, fpos, epoch, txt):
         epoch, txt)
     return fmrr
 
+def subgraph_ranking_scores(fresult, pos, epoch, txt):
+    hpos = [p for k in pos.keys() for p in pos[k]['head']]
+    tpos = [p for k in pos.keys() for p in pos[k]['tail']]
+    mrr, mean_pos, hits = compute_scores(np.array(hpos+tpos))
+    log.info(
+        "[%3d] %s: MRR = %.2f, Mean Rank = %.2f, Hits@10 = %.2f" %
+        (epoch, txt, mrr, mean_pos, hits )
+    )
+    fresult.write(
+        "[%3d] %s: MRR = %.2f, Mean Rank = %.2f, Hits@10 = %.2f\n" %
+        (epoch, txt, mrr, mean_pos, hits)
+    )
+    return mrr
 
 def _print_pos(fresult, pos, fpos, epoch, txt):
     mrr, mean_pos, hits = compute_scores(pos)
