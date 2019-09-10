@@ -95,6 +95,7 @@ class Experiment(object):
         self.parser.add_argument('--fembed', type=str, help='Path to store final embeddings for every entity and relation', default=None)
         self.parser.add_argument('--fin', type=str, help='Path to input data', default=None)
         self.parser.add_argument('--ftax', type=str, help='Path to the taxonomy file', default=None)
+        self.parser.add_argument('--fsub', type=str, help='Path to the subgraphs file', default=None)
         self.parser.add_argument('--embed', type=str, help='Strategy to assign embeddings', default='kognac')
         self.parser.add_argument('--test-all', type=int, help='Evaluate Test set after x epochs', default=10)
         self.parser.add_argument('--no-pairwise', action='store_const', default=False, const=True)
@@ -103,10 +104,11 @@ class Experiment(object):
         self.parser.add_argument('--sampler', type=str, default='random-mode')
         self.parser.add_argument('--norm', type=str, default='l1', help=' Normalization (l1(default) or l2)')
 
-        self.parser.add_argument('--subgraphs', type=bool, help='Whether to test with subgraphs or not', default=False)
+        self.parser.add_argument('--subcreate', dest="subcreate", help='Create subgraphs', action='store_true')
+        self.parser.add_argument('--subtest', dest = "subtest", help='Test with subgraphs', action='store_true')
         self.parser.add_argument('--minsubsize', type=int, help='Minimum subgraph size', default=50)
         self.parser.add_argument('--topk', type=int, help='Number of top subgraphs to check for evaluation', default=5)
-        self.parser.add_argument('--subtypemake', type=str, help='Type of subgraph to create', default="avg")
+        self.parser.add_argument('--subalgo', type=str, help='Type of subgraph to create', default="avg")
         self.parser.add_argument('--subdistance', type=str, help='Distance function to evaluate subgraphs on', default="avg")
         self.neval = -1
         self.best_valid_score = -1.0
@@ -115,7 +117,7 @@ class Experiment(object):
         self.avg_embeddings = []
         self.var_embeddings = []
 
-    def make_subgraphs(self, subType, sorted_triples, mincard, trn, subAlgo):
+    def make_subgraphs(self, subType, sorted_triples, mincard, trn_model, sub_algo):
         similar_entities = []
         current = np.zeros(self.args.ncomp, dtype=np.float64)
         count = 0
@@ -142,7 +144,7 @@ class Experiment(object):
                     self.avg_embeddings.append(mean)
                     columnsSquareDiff = 0
                     for se in similar_entities:
-                        columnsSquareDiff += (trn.model.E[se] - mean) * (trn.model.E[se] - mean)
+                        columnsSquareDiff += (trn_model.E[se] - mean) * (trn_model.E[se] - mean)
                     if count > 2:
                         columnsSquareDiff /= (count-1)
                     self.var_embeddings.append(columnsSquareDiff)
@@ -159,14 +161,14 @@ class Experiment(object):
                 current.fill(0.0)
                 similar_entities.clear()
             count += 1
-            current += trn.model.E[other_ent]
+            current += trn_model.E[other_ent]
             similar_entities.append(other_ent)
         # After looping over all triples, add remaining entities to a subgraph
         if count > mincard:
             self.avg_embeddings.append(current/count)
             columnsSquareDiff = 0
             for se in similar_entities:
-                columnsSquareDiff += (trn.model.E[se] - mean) * (trn.model.E[se] - mean)
+                columnsSquareDiff += (trn_model.E[se] - mean) * (trn_model.E[se] - mean)
             if count > 2:
                 columnsSquareDiff /= (count-1)
             self.var_embeddings.append(columnsSquareDiff)
@@ -194,16 +196,25 @@ class Experiment(object):
             self.evaluator = LinkPredictionEval
         else:
             raise ValueError('Unknown experiment mode (%s)' % self.args.mode)
-        self.train()
 
-    def subgraph_callback(self, trn):
+        if self.args.subcreate:
+            print("UNM: here")
+            self.subgraphs_create()
+        elif self.args.subtest:
+            print("UNM: there")
+            self.subgraphs_test()
+        else:
+            self.train()
+
+    def subgraph_callback(self, trn_model):
         #TODO: use subgraphs to find ranks, scores
         log.info("Computing SUBGRAPH positions and scores for TEST dataset...")
         time_start = timeit.default_timer()
-        pos_test = self.ev_test.subgraph_positions(trn.model, self.subgraphs.subgraphs)
-        subgraph_ranking_scores(self.fresult, pos_test, trn.epoch, 'TEST')
+        pos_test = self.ev_test.subgraph_positions(trn_model, self.subgraphs.subgraphs)
+        subgraph_ranking_scores(self.fresult, pos_test, 'TEST')
         time_end = timeit.default_timer()
-        log.info("At epoch %d, Time spent in computing SUBGRAPH positions and scores for TEST dataset = %ds" % (trn.epoch, time_end - time_start))
+        log.info("Time spent in computing SUBGRAPH positions and scores for TEST dataset = %ds" % (time_end - time_start))
+        self.fresult.close()
 
     def ranking_callback(self, trn, with_eval=False):
         # print basic info
@@ -297,6 +308,79 @@ class Experiment(object):
         second_half = ll[int(first_half_len):]
         return [first_half, second_half]
 
+
+    def subgraphs_test(self):
+        train_triples, valid_triples, test_triples, sz = self.get_all_triples()
+        true_triples = train_triples + test_triples + valid_triples
+        if self.args.mode == 'rank':
+            self.ev_test = self.evaluator(test_triples, true_triples, self.neval)
+            self.ev_valid = self.evaluator(valid_triples,true_triples, self.neval)
+
+        self.subgraphs = Subgraphs.load(self.args.fsub)
+        trn_model = Model.load(self.args.fout)
+        dataset = self.args.fin.split('/')[-1].split('.')[0]
+        algo = self.algo
+        epochs = self.args.me
+        sub_algo = self.args.subalgo
+        mincard = self.args.minsubsize
+        outfile = dataset + "-" + algo + "-epochs-" + str(epochs) + "-sub_algo-" + sub_algo + "-tau-"+ str(mincard) +".result"
+        fresult = open(outfile, "w")
+        self.fresult = fresult
+        self.subgraph_callback(trn_model)
+        print ("Testing without subgraphs : ")
+    '''
+    input:
+
+    output:
+            Subgraph embeddings (array of objects of Subgraph class)
+
+    '''
+    def subgraphs_create(self):
+        train_triples, valid_triples, test_triples, sz = self.get_all_triples()
+        xs = train_triples
+        print ("Trying to make subgraphs...")
+        mincard = self.args.minsubsize
+        topk    = self.args.topk
+        sub_algo = self.args.subalgo
+
+        dataset = self.args.fin.split('/')[-1].split('.')[0]
+        algo = self.algo
+        epochs = self.args.me
+
+        print("UNM: reading model")
+        results = Model.load(self.args.fout)
+        trn_model = results['model']
+        print("UNM: reading model : DONE")
+
+        sorted_ps = sorted(xs, key=lambda l : (l[2], l[0]))
+        #print ("calling with type = ", SUBTYPE.SPO)
+        #print(sorted_ps)
+        self.make_subgraphs(SUBTYPE.SPO, sorted_ps, mincard, trn_model, sub_algo)
+
+        sorted_po = sorted(xs, key=lambda l : (l[2], l[1]))
+        #print ("calling with type = ", SUBTYPE.POS)
+        self.make_subgraphs(SUBTYPE.POS, sorted_po, mincard, trn_model, sub_algo)
+
+        print("UNM: creating subgraphs done")
+        trn_model.add_param('S', (self.subgraphs.get_Nsubgraphs(), self.args.ncomp))
+        if sub_algo == "avg":
+            #print(np.shape(trn.model.S))
+            #print(len(trn.model.S))
+            trn_model.S = self.avg_embeddings
+            #for sube in trn.model.S:
+            #    print(type(sube) , " :" , sube)
+            #print(type(self.avg_embeddings) , " : " , self.avg_embeddings[self.subgraphs.get_Nsubgraphs()-1])
+        elif sub_algo == "var":
+            trn_model.S = self.var_embeddings
+        #print (triple)
+        #print ("dimensions = ", self.args.ncomp)
+        #print ("# of triples = ", len(sorted_po))
+        subgraph_file_name = dataset + "-" + algo + "-epochs-" + str(epochs) + "-sub_algo-" + sub_algo + "-tau-"+ str(mincard) +".sub"
+        self.subgraphs.save(subgraph_file_name)
+        # Construct the pickle file name
+        model_file_name = dataset + "-" + algo + "-epochs-" + str(epochs) + "-sub_algo-" + sub_algo + "-tau-"+ str(mincard) +".mod"
+        trn_model.save(model_file_name)
+
     def fit_model(self, xs, ys, sz, setup_trainer=True, trainer=None):
         # create sampling objects
         # Sample is given the array of triples.
@@ -328,37 +412,7 @@ class Experiment(object):
         )
         trn.fit(xs, ys)
         # each x in xs is a tuple (SUB, OBJ, PREDicate)
-        print ("Trying to make subgraphs...")
-        mincard = self.args.minsubsize
-        topk    = self.args.topk
-        subAlgo = self.args.subtypemake
-
-
-        sorted_ps = sorted(xs, key=lambda l : (l[2], l[0]))
-        #print ("calling with type = ", SUBTYPE.SPO)
-        #print(sorted_ps)
-        self.make_subgraphs(SUBTYPE.SPO, sorted_ps, mincard, trn, subAlgo)
-
-        sorted_po = sorted(xs, key=lambda l : (l[2], l[1]))
-        #print ("calling with type = ", SUBTYPE.POS)
-        self.make_subgraphs(SUBTYPE.POS, sorted_po, mincard, trn, subAlgo)
-
-        trn.model.add_param('S', (self.subgraphs.get_Nsubgraphs(), self.args.ncomp))
-        if subAlgo == "avg":
-            #print(np.shape(trn.model.S))
-            #print(len(trn.model.S))
-            trn.model.S = self.avg_embeddings
-            #for sube in trn.model.S:
-            #    print(type(sube) , " :" , sube)
-            #print(type(self.avg_embeddings) , " : " , self.avg_embeddings[self.subgraphs.get_Nsubgraphs()-1])
-        elif subAlgo == "var":
-            trn.model.S = self.var_embeddings
-        #print (triple)
-        #print ("dimensions = ", self.args.ncomp)
-        #print ("# of triples = ", len(sorted_po))
-
-        self.subgraph_callback(trn)
-        #self.callback(trn, with_eval=True)
+        self.callback(trn, with_eval=True)
         return trn
 
     def make_graph(self, triples, N, M):
@@ -384,15 +438,14 @@ class Experiment(object):
         return {'left' : -1, 'right' : -1}
         #raise ValueError("Entity %d should not exist" % (entity))
 
-
-    def train(self):
+    def get_all_triples(self):
         # read data
         #with open(self.args.fin, 'rb') as fin:
         #    data = pickle.load(fin)
 
-        file_path = self.args.fin
+        file_path             = self.args.fin
         trident_db            = trident.Db(file_path)
-        batch_size             = 1000
+        batch_size            = 1000
         percent_valid_triples = 0.01
         percent_test_triples  = 0.01
         if trident_db.n_triples() < 1000:
@@ -425,6 +478,12 @@ class Experiment(object):
         train_triples = parse_triples_series(train_triples_series)
         valid_triples = parse_triples_series(valid_triples_series)
         test_triples  = parse_triples_series(test_triples_series)
+        return train_triples, valid_triples, test_triples, sz
+
+    def train(self):
+        train_triples, valid_triples, test_triples, sz = self.get_all_triples()
+        N = sz[0]
+        M = sz[2]
         print (type(train_triples))
         print (len(train_triples))
         #true_triples = data['train_subs'] + data['test_subs'] + data['valid_subs']
@@ -477,13 +536,13 @@ class Experiment(object):
             fplot.write("")
 
         # Make a graph from edges in training triples.
-        #graph_start = timeit.default_timer()
+        graph_start = timeit.default_timer()
         global graph
         # TODO: for graph use dynamic dict instead of list
-        #graph = self.make_graph(train_triples, N, M)
-        #graph_end = timeit.default_timer()
-        #log.info("Time to build the graph = %ds" %(graph_end - graph_start))
-        #self.fresult.write("Time to build the graph = %ds\n" %(graph_end - graph_start))
+        graph = self.make_graph(train_triples, N, M)
+        graph_end = timeit.default_timer()
+        log.info("Time to build the graph = %ds" %(graph_end - graph_start))
+        self.fresult.write("Time to build the graph = %ds\n" %(graph_end - graph_start))
 
         #sim_start = timeit.default_timer()
         #sim = simrank(graph, N)
@@ -636,6 +695,8 @@ class Experiment(object):
             log.info("Time to fit model for 100%% samples (%d epochs) = %ds" % (trainer.max_epochs, time_end - time_start))
             self.fresult.write("Time to fit model for 100%% samples (%d epochs) = %ds\n" % (trainer.max_epochs, time_end - time_start))
 
+            #self.subgraphs_create(xs, ys, sz, trainer)
+
 
 
 class FilteredRankingEval(object):
@@ -698,7 +759,8 @@ class FilteredRankingEval(object):
                 if False == found:
                     data += str(o) + "\n"
                     print ("For ", str(s) , ", ", str(p), " subgraph rank(o) = " , rank, " expected o = ", o)
-                ppos['tail'].append(rank)
+                # rank could be 0 which leads to a possible divide by 0 error
+                ppos['tail'].append(rank + 1)
 
                 ocrr = ccorr(mdl.R[p], mdl.E[o])
                 scores_s = np.dot(SR, ocrr).flatten()
@@ -718,7 +780,8 @@ class FilteredRankingEval(object):
                 if False == found:
                     data += str(s) + "\n"
                     print ("For ", str(o) , ", ", str(p), " subgraph rank(s) = " , rank, " expected s = ", s)
-                ppos['head'].append(rank)
+                # rank could be 0 which leads to a possible divide by 0 error
+                ppos['head'].append(rank + 1)
             pos[p] = ppos
 
         print("Mean tail rank = ", sumTailRanks / total)
@@ -879,17 +942,18 @@ def ranking_scores(fresult, pos, fpos, epoch, txt):
         epoch, txt)
     return fmrr
 
-def subgraph_ranking_scores(fresult, pos, epoch, txt):
+def subgraph_ranking_scores(fresult, pos, txt):
     hpos = [p for k in pos.keys() for p in pos[k]['head']]
     tpos = [p for k in pos.keys() for p in pos[k]['tail']]
     mrr, mean_pos, hits = compute_scores(np.array(hpos+tpos))
+    log.info("Subgraph ranking scores : ")
     log.info(
-        "[%3d] %s: MRR = %.2f, Mean Rank = %.2f, Hits@10 = %.2f" %
-        (epoch, txt, mrr, mean_pos, hits )
+        "%s: MRR = %.2f, Mean Rank = %.2f, Hits@10 = %.2f" %
+        (txt, mrr, mean_pos, hits )
     )
     fresult.write(
-        "[%3d] %s: MRR = %.2f, Mean Rank = %.2f, Hits@10 = %.2f\n" %
-        (epoch, txt, mrr, mean_pos, hits)
+        "%s: MRR = %.2f, Mean Rank = %.2f, Hits@10 = %.2f\n" %
+        (txt, mrr, mean_pos, hits)
     )
     return mrr
 
@@ -1156,7 +1220,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             self.file_gradients = open(fg, "w")
         if fe is not None:
             self.file_embeddings = open(fe, "w")
-            #self.pickle_file_embeddings = open(fe+".bin", "wb")
+            self.pickle_file_embeddings = open(fe+".pkl", "wb")
 
     def fit(self, xs, ys):
         # samplef is RandomModeSample set by setup_trainer() method

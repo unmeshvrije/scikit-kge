@@ -29,6 +29,7 @@ class ExpHolE(Experiment):
         self.parser.add_argument('--rparam', type=float, help='Regularization for W', default=0)
         self.parser.add_argument('--afs', type=str, default='sigmoid', help='Activation function')
         self.evaluator = HolEEval
+        self.algo = "HolE"
 
     def setup_trainer(self, sz, sampler):
         model = HolE(
