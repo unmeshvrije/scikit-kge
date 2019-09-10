@@ -161,7 +161,10 @@ class Experiment(object):
                 current.fill(0.0)
                 similar_entities.clear()
             count += 1
-            current += trn_model.E[other_ent]
+            if sub_algo == "transe":
+                current += trn_model.E[other_ent]
+            else:
+                current += np.dot(trn_model.R[rel], trn_model.E[other_ent])
             similar_entities.append(other_ent)
         # After looping over all triples, add remaining entities to a subgraph
         if count > mincard:
@@ -327,7 +330,6 @@ class Experiment(object):
         fresult = open(outfile, "w")
         self.fresult = fresult
         self.subgraph_callback(trn_model)
-        print ("Testing without subgraphs : ")
     '''
     input:
 
