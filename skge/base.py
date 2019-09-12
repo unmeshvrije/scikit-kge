@@ -332,7 +332,8 @@ class Experiment(object):
         epochs = self.args.me
         sub_algo = self.args.subalgo
         mincard = self.args.minsubsize
-        outfile = dataset + "-" + algo + "-epochs-" + str(epochs) + "-sub_algo-" + sub_algo + "-tau-"+ str(mincard) +".result"
+        subgraph_embeddings_home = "/var/scratch/uji300/hole/"
+        outfile = subgraph_embeddings_home + dataset + "-"+algo+"-epochs-" + str(epochs) + "-subalgo-" + sub_algo + "-tau-" + str(mincard) + ".result"
         fresult = open(outfile, "w")
         self.fresult = fresult
         self.subgraph_callback(trn_model, topk)
