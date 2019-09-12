@@ -1,29 +1,50 @@
 #!/bin/sh
+DB="lubm1"
 EPOCH=50
 MS=10
-DB="lubm1"
+TOPK=5
+SUBALGO="avg"
 
 if [ $# -ge 1 ]; then
-    EPOCH=$1
+    DB=$1
 fi
 
 if [ $# -ge 2 ]; then
-    MS=$2
+    EPOCH=$2
 fi
 
 if [ $# -ge 3 ]; then
-    DB=$3
+    MS=$3
+fi
+
+if [ $# -ge 4 ]; then
+    TOPK=$4
+fi
+
+if [ $# -ge 5 ]; then
+    SUBALGO=$5
 fi
 
 echo "# args = $#"
+echo "DB = $DB"
 echo "EPOCH = $EPOCH"
 echo "MS = $MS"
-echo "DB = $DB"
+echo "TOPK = $TOPK"
+echo "SUBALGO = $SUBALGO"
 
+hole_embeddings_file="/var/scratch/uji300/hole/$DB""_hole_model_epochs_$EPOCH"
+subgraph_embeddings_home="/var/scratch/uji300/hole/"
 
-python run_hole.py --fin /var/scratch/uji300/trident/$DB  --test-all 100 --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --minsubsize $MS --fout "/var/scratch/uji300/hole/$DB""_hole_model_epochs_$EPOCH"
+if [ ! -f $hole_embeddings_file ]; then
+    echo "Embeddings not found training with HolE..."
+    python run_hole.py --fin /var/scratch/uji300/trident/$DB  --test-all 100 --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --fout $hole_embeddings_file
+fi
 
+subfile_name=$subgraph_embeddings_home"$DB-HolE-epochs-$EPOCH-subalgo-$SUBALGO-tau-$MS"".sub"
+model_file_name=$subgraph_embeddings_home"$DB-HolE-epochs-$EPOCH-subalgo-$SUBALGO-tau-$MS"".mod"
+if [ ! -f $subfile_name ] || [ ! -f $model_file_name ]; then
+    echo "Generating subgraphs for $DB with mincard $MS and algo $SUBALGO..."
+    python run_hole.py --fin /var/scratch/uji300/trident/$DB  --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --subcreate --minsubsize $MS --subalgo $SUBALGO --fout $hole_embeddings_file
+fi
 
-#python run_hole.py --fin /var/scratch/uji300/trident/lubm1  --test-all 55 --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --subcreate --minsubsize $MS --subalgo avg --fout "/var/scratch/uji300/hole/lubm1_hole_model_epochs_$EPOCH"
-
-#python run_hole.py --fin /var/scratch/uji300/trident/lubm1  --test-all 55 --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --subtest --minsubsize $MS --subalgo avg --fout "./lubm1-HolE-epochs-$EPOCH-sub_algo-avg-tau-$MS"".mod" --fsub "./lubm1-HolE-epochs-$EPOCH-sub_algo-avg-tau-$MS"".sub"
+python run_hole.py --fin /var/scratch/uji300/trident/$DB  --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --subtest --minsubsize $MS --subalgo $SUBALGO --fout $model_file_name  --fsub $subfile_name --topk $TOPK

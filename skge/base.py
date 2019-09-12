@@ -131,6 +131,7 @@ class Experiment(object):
             rel = triple[2]
             ent = -1
             other_ent = -1
+            ER = None
             if subType == SUBTYPE.POS:
                 ent = obj
                 other_ent = sub
@@ -138,6 +139,8 @@ class Experiment(object):
                 #print ("subtype = " , subType)
                 ent = sub
                 other_ent = obj
+            if sub_algo == "hole":
+                ER = ccorr(trn_model.R[rel], trn_model.E)
             if ent != prevo or rel != prevp:
                 if count > mincard:
                     mean = current/count
@@ -163,8 +166,12 @@ class Experiment(object):
             count += 1
             if sub_algo == "transe":
                 current += trn_model.E[other_ent]
-            else:
-                current += np.dot(trn_model.R[rel], trn_model.E[other_ent])
+            elif sub_algo == "hole":
+                if subType == SUBTYPE.POS:
+                    current += np.dot(trn_model.E, ER[other_ent])
+                else:
+                    current += np.dot(ER, trn_model.E[other_ent])
+                #current += trn_model.E[other_ent]
             similar_entities.append(other_ent)
         # After looping over all triples, add remaining entities to a subgraph
         if count > mincard:
@@ -201,20 +208,18 @@ class Experiment(object):
             raise ValueError('Unknown experiment mode (%s)' % self.args.mode)
 
         if self.args.subcreate:
-            print("UNM: here")
             self.subgraphs_create()
         elif self.args.subtest:
-            print("UNM: there")
             self.subgraphs_test()
         else:
             self.train()
 
-    def subgraph_callback(self, trn_model):
+    def subgraph_callback(self, trn_model, topk):
         #TODO: use subgraphs to find ranks, scores
         log.info("Computing SUBGRAPH positions and scores for TEST dataset...")
         time_start = timeit.default_timer()
         pos_test = self.ev_test.subgraph_positions(trn_model, self.subgraphs.subgraphs)
-        subgraph_ranking_scores(self.fresult, pos_test, 'TEST')
+        subgraph_ranking_scores(self.fresult, pos_test, 'TEST', topk)
         time_end = timeit.default_timer()
         log.info("Time spent in computing SUBGRAPH positions and scores for TEST dataset = %ds" % (time_end - time_start))
         self.fresult.close()
@@ -319,6 +324,7 @@ class Experiment(object):
             self.ev_test = self.evaluator(test_triples, true_triples, self.neval)
             self.ev_valid = self.evaluator(valid_triples,true_triples, self.neval)
 
+        topk    = self.args.topk
         self.subgraphs = Subgraphs.load(self.args.fsub)
         trn_model = Model.load(self.args.fout)
         dataset = self.args.fin.split('/')[-1].split('.')[0]
@@ -329,7 +335,7 @@ class Experiment(object):
         outfile = dataset + "-" + algo + "-epochs-" + str(epochs) + "-sub_algo-" + sub_algo + "-tau-"+ str(mincard) +".result"
         fresult = open(outfile, "w")
         self.fresult = fresult
-        self.subgraph_callback(trn_model)
+        self.subgraph_callback(trn_model, topk)
     '''
     input:
 
@@ -342,17 +348,14 @@ class Experiment(object):
         xs = train_triples
         print ("Trying to make subgraphs...")
         mincard = self.args.minsubsize
-        topk    = self.args.topk
         sub_algo = self.args.subalgo
 
         dataset = self.args.fin.split('/')[-1].split('.')[0]
         algo = self.algo
         epochs = self.args.me
 
-        print("UNM: reading model")
         results = Model.load(self.args.fout)
         trn_model = results['model']
-        print("UNM: reading model : DONE")
 
         sorted_ps = sorted(xs, key=lambda l : (l[2], l[0]))
         #print ("calling with type = ", SUBTYPE.SPO)
@@ -363,7 +366,6 @@ class Experiment(object):
         #print ("calling with type = ", SUBTYPE.POS)
         self.make_subgraphs(SUBTYPE.POS, sorted_po, mincard, trn_model, sub_algo)
 
-        print("UNM: creating subgraphs done")
         trn_model.add_param('S', (self.subgraphs.get_Nsubgraphs(), self.args.ncomp))
         if sub_algo == "avg":
             #print(np.shape(trn.model.S))
@@ -374,13 +376,12 @@ class Experiment(object):
             #print(type(self.avg_embeddings) , " : " , self.avg_embeddings[self.subgraphs.get_Nsubgraphs()-1])
         elif sub_algo == "var":
             trn_model.S = self.var_embeddings
-        #print (triple)
-        #print ("dimensions = ", self.args.ncomp)
-        #print ("# of triples = ", len(sorted_po))
-        subgraph_file_name = dataset + "-" + algo + "-epochs-" + str(epochs) + "-sub_algo-" + sub_algo + "-tau-"+ str(mincard) +".sub"
+
+        # Save subgraphs and model
+        subgraph_embeddings_home = "/var/scratch/uji300/hole/"
+        subgraph_file_name= subgraph_embeddings_home + dataset + "-HolE-epochs-" + str(epochs) + "-subalgo-" + sub_algo + "-tau-" + str(mincard) + ".sub"
         self.subgraphs.save(subgraph_file_name)
-        # Construct the pickle file name
-        model_file_name = dataset + "-" + algo + "-epochs-" + str(epochs) + "-sub_algo-" + sub_algo + "-tau-"+ str(mincard) +".mod"
+        model_file_name= subgraph_embeddings_home + dataset + "-HolE-epochs-" + str(epochs) + "-subalgo-" + sub_algo + "-tau-" + str(mincard) + ".mod"
         trn_model.save(model_file_name)
 
     def fit_model(self, xs, ys, sz, setup_trainer=True, trainer=None):
@@ -688,7 +689,6 @@ class Experiment(object):
             log.info("Time to fit model for 100%% samples (%d epochs) = %ds" % (trainer.max_epochs, time_end - time_start))
             self.fresult.write("Time to fit model for 100%% samples (%d epochs) = %ds\n" % (trainer.max_epochs, time_end - time_start))
         else:
-            #print ("UNM$$$ Using 100% data for training... #############")
             xs = train_triples
             ys = np.ones(len(xs))
             time_start= timeit.default_timer()
@@ -738,7 +738,7 @@ class FilteredRankingEval(object):
             # dictionary with 'tail' as the key, will store positions of H after keeping T and P constant
             ppos = {'head': [], 'tail': []}
 
-            # do self.prepare(mdl, p ) # calcualte ccorr(p , all subgraphs)
+            # do self.prepare(mdl, p ) # calculate ccorr(p , all subgraphs)
             # mdl.S should contain all subgraph embeddings
             SR = ccorr(mdl.R[p], mdl.S)
             for s, o in sos:#[:self.neval[p]]:
@@ -760,7 +760,7 @@ class FilteredRankingEval(object):
                 sumTailRanks += rank
                 if False == found:
                     data += str(o) + "\n"
-                    print ("For ", str(s) , ", ", str(p), " subgraph rank(o) = " , rank, " expected o = ", o)
+                    #print ("For ", str(s) , ", ", str(p), " subgraph rank(o) = " , rank, " expected o = ", o)
                 # rank could be 0 which leads to a possible divide by 0 error
                 ppos['tail'].append(rank + 1)
 
@@ -781,7 +781,7 @@ class FilteredRankingEval(object):
                 total += 1
                 if False == found:
                     data += str(s) + "\n"
-                    print ("For ", str(o) , ", ", str(p), " subgraph rank(s) = " , rank, " expected s = ", s)
+                    #print ("For ", str(o) , ", ", str(p), " subgraph rank(s) = " , rank, " expected s = ", s)
                 # rank could be 0 which leads to a possible divide by 0 error
                 ppos['head'].append(rank + 1)
             pos[p] = ppos
@@ -829,11 +829,7 @@ class FilteredRankingEval(object):
             #log.info("sos len = %d" % (len(sos)))
             for s, o in sos:#[:self.neval[p]]:
                 count += 1
-                #print("UNM$$$ ********* score_o = ", self.scores_o(mdl, s, p))
-                #print("UNM$$$ ********* score_o = ", np.shape(self.scores_o(mdl, s, p)))
                 scores_o = self.scores_o(mdl, s, p).flatten()
-                #print("UNM$$$ @@@@@@@@ score_o = ", scores_o)
-                #print("UNM$$$ @@@@@@@@ shape(score_o) = ", np.shape(scores_o))
                 sortidx_o = argsort(scores_o)[::-1]
                 # Sort all the entities (As objects) and find out the index of the "O" in picture
                 # Store the index+1 in the ppos['tail]
@@ -944,20 +940,29 @@ def ranking_scores(fresult, pos, fpos, epoch, txt):
         epoch, txt)
     return fmrr
 
-def subgraph_ranking_scores(fresult, pos, txt):
+def subgraph_ranking_scores(fresult, pos, txt, topk):
     hpos = [p for k in pos.keys() for p in pos[k]['head']]
     tpos = [p for k in pos.keys() for p in pos[k]['tail']]
-    mrr, mean_pos, hits = compute_scores(np.array(hpos+tpos))
+    head_mrr, head_mean_pos, head_ans_hits = compute_scores(np.array(hpos), hits=topk)
+    tail_mrr, tail_mean_pos, tail_ans_hits = compute_scores(np.array(tpos), hits=topk)
+
     log.info("Subgraph ranking scores : ")
     log.info(
-        "%s: MRR = %.2f, Mean Rank = %.2f, Hits@10 = %.2f" %
-        (txt, mrr, mean_pos, hits )
+        "%s: MRR(H) = %.2f, Mean Rank(H) = %.2f, Hits@%d(H) = %.2f" %
+        (txt, head_mrr, head_mean_pos, topk, head_ans_hits )
+    )
+    log.info(
+        "%s: MRR(T) = %.2f, Mean Rank(T) = %.2f, Hits@%d(T) = %.2f" %
+        (txt, tail_mrr, tail_mean_pos, topk, tail_ans_hits )
     )
     fresult.write(
-        "%s: MRR = %.2f, Mean Rank = %.2f, Hits@10 = %.2f\n" %
-        (txt, mrr, mean_pos, hits)
+        "%s: MRR(H) = %.2f, Mean Rank(H) = %.2f, Hits@%d(H) = %.2f\n" %
+        (txt, head_mrr, head_mean_pos, topk, head_ans_hits)
     )
-    return mrr
+    fresult.write(
+        "%s: MRR(T) = %.2f, Mean Rank(T) = %.2f, Hits@%d(T) = %.2f\n" %
+        (txt, tail_mrr, tail_mean_pos, topk, tail_ans_hits)
+    )
 
 def _print_pos(fresult, pos, fpos, epoch, txt):
     mrr, mean_pos, hits = compute_scores(pos)
@@ -976,8 +981,8 @@ def _print_pos(fresult, pos, fpos, epoch, txt):
 def compute_scores(pos, hits=10):
     mrr = np.mean(1.0 / pos)
     mean_pos = np.mean(pos)
-    hits = np.mean(pos <= hits).sum() * 100
-    return mrr, mean_pos, hits
+    ans_hits = np.mean(pos <= hits).sum() * 100
+    return mrr, mean_pos, ans_hits
 
 
 def cardinalities(xs, ys, sz):
@@ -1120,7 +1125,6 @@ class StochasticTrainer(object):
         # idx = [0,1,2,...., k] where len(xys) = k
         idx = np.arange(len(xys))
         #pdb.set_trace();
-        #print("UNM$$$ len(xys) = ", len(xys))
         self.batch_size = len(xys) // self.nbatches
         #print (type(self.batch_size))
         #print(type(xys))
@@ -1128,7 +1132,6 @@ class StochasticTrainer(object):
         # For batch size 10 and nbatches 100 and len(xys) = 1000
         # batch_idx = [10,20,30,40,....100,110,....990,1000]
         batch_idx = np.arange(self.batch_size, len(xys), self.batch_size)
-        #log.info ("UNM$$$ batch indexes : ", batch_idx)
         #pdb.set_trace()
         for self.epoch in range(1, self.max_epochs + 1):
             # shuffle training examples
@@ -1274,7 +1277,6 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         pxs = []
         nxs = []
 
-        #print ("UNM$$$ process batch of PairWise Stochastic Learner: ", len(xys), " : " , xys[0])
         for xy in xys:
 
             # samplef is RandomModeSampler
@@ -1298,15 +1300,12 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             # Not set
             self.model._prepare_batch_step(pxs, nxs)
         #pdb.set_trace()
-        #print("UNM$$$ Calling pairwise gradient of HolE : ")
-        #print ("UNM$$$ pxs shape = {} , nxs shape = {}".format(np.shape(pxs), np.shape(nxs)))
         grads = self.model._pairwise_gradients(pxs, nxs)
 
         #pdb.set_trace()
         # update if examples violate margin
         if grads is not None:
             self.nviolations += self.model.nviolations
-            #print("UNM$$$ calling _batch_step()")
             self._batch_step(grads)
 
 
