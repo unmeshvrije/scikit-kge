@@ -151,6 +151,8 @@ class Experiment(object):
                     if count > 2:
                         columnsSquareDiff /= (count-1)
                     self.var_embeddings.append(columnsSquareDiff)
+                    print("UNM : columns square diff (aka var embeddings) ")
+                    print(columnsSquareDiff)
                     # add subgraph
                     self.subgraphs.add_subgraphs(subType, prevo, prevp, count, similar_entities)
                     for se in similar_entities:
@@ -214,11 +216,12 @@ class Experiment(object):
         else:
             self.train()
 
-    def subgraph_callback(self, trn_model, topk):
+    def subgraph_callback(self, trn_model, topk, sub_algo):
         #TODO: use subgraphs to find ranks, scores
         log.info("Computing SUBGRAPH positions and scores for TEST dataset...")
         time_start = timeit.default_timer()
-        pos_test = self.ev_test.subgraph_positions(trn_model, self.subgraphs.subgraphs)
+        print("UNM: dimensions ", self.args.ncomp)
+        pos_test = self.ev_test.subgraph_positions(trn_model, self.subgraphs.subgraphs, sub_algo)
         subgraph_ranking_scores(self.fresult, pos_test, 'TEST', topk)
         time_end = timeit.default_timer()
         log.info("Time spent in computing SUBGRAPH positions and scores for TEST dataset = %ds" % (time_end - time_start))
@@ -336,7 +339,7 @@ class Experiment(object):
         outfile = subgraph_embeddings_home + dataset + "-"+algo+"-epochs-" + str(epochs) + "-subalgo-" + sub_algo + "-tau-" + str(mincard) + ".result"
         fresult = open(outfile, "w")
         self.fresult = fresult
-        self.subgraph_callback(trn_model, topk)
+        self.subgraph_callback(trn_model, topk, sub_algo)
     '''
     input:
 
@@ -367,16 +370,16 @@ class Experiment(object):
         #print ("calling with type = ", SUBTYPE.POS)
         self.make_subgraphs(SUBTYPE.POS, sorted_po, mincard, trn_model, sub_algo)
 
-        trn_model.add_param('S', (self.subgraphs.get_Nsubgraphs(), self.args.ncomp))
-        if sub_algo == "avg":
             #print(np.shape(trn.model.S))
             #print(len(trn.model.S))
-            trn_model.S = self.avg_embeddings
+        trn_model.add_param('SA', (self.subgraphs.get_Nsubgraphs(), self.args.ncomp))
+        trn_model.SA = self.avg_embeddings
             #for sube in trn.model.S:
             #    print(type(sube) , " :" , sube)
             #print(type(self.avg_embeddings) , " : " , self.avg_embeddings[self.subgraphs.get_Nsubgraphs()-1])
-        elif sub_algo == "var":
-            trn_model.S = self.var_embeddings
+        if sub_algo == "var":
+            trn_model.add_param('SV', (self.subgraphs.get_Nsubgraphs(), self.args.ncomp))
+            trn_model.SV = self.var_embeddings
 
         # Save subgraphs and model
         subgraph_embeddings_home = "/var/scratch/uji300/hole/"
@@ -726,7 +729,51 @@ class FilteredRankingEval(object):
             else:
                 self.neval[p] = np.int(np.ceil(neval * len(sos) / len(xs)))
 
-    def subgraph_positions(self, mdl, subgraphs):
+    def get_kl_divergence_scores(self, model, subgraphs, ent, rel, sub_type):
+        '''
+        Get the subgraph with this ent and rel. sample some entites for trueAvg and trueVar embeddings
+        now find KL divergence with these trueAvg and trueVar embeddings with all other subgraphs
+        '''
+        summation = 0#np.zeros(self.args.ncomp, dtype=np.float64)
+        similar_entities = []
+        count = 0
+        matching_subgraph_found = False
+        ER = ccorr(model.R[rel], model.E)
+        print ("UNM : Entity : ", ent , " relation : ", rel)
+        for i in range(len(subgraphs)):
+            #print("Subgraphs ", str(i+1), ": ", subgraphs[i].ent , " , ", subgraphs[i].rel)
+            if subgraphs[i].ent == ent and subgraphs[i].rel == rel:
+                matching_subgraph_found = True
+                print("UNM: Subgraph contains ", subgraphs[i].size, " entities")
+                for j, e in enumerate(subgraphs[i].entities):
+                    summation += model.E[e]
+                    similar_entities.append(e)
+                    count += 1
+                    if j > 10:
+                        break
+                    mean = summation / count
+                    break
+        if not matching_subgraph_found:
+            if sub_type == SUBTYPE.POS:
+                mean = np.dot(model.E, ER[ent])
+            else:
+                mean = np.dot(ER, model.E[ent])
+            columnsSquareDiff = mean
+        else:
+            columnsSquareDiff = 0
+
+        for se in similar_entities:
+            columnsSquareDiff += (model.E[se] - mean) * (model.E[se] - mean)
+            if count > 2:
+                columnsSquareDiff /= (count - 1)
+        true_avg_embeddings = mean
+        true_var_embeddings = columnsSquareDiff
+        print("UNM: True avg and var embeddings : ")
+        print(true_avg_embeddings)
+        print(true_var_embeddings)
+        return None
+
+    def subgraph_positions(self, mdl, subgraphs, sub_algo):
         pos = {}
         # do equivalent of self.prepare_global(mdl)
         count = 0
@@ -741,11 +788,15 @@ class FilteredRankingEval(object):
 
             # do self.prepare(mdl, p ) # calculate ccorr(p , all subgraphs)
             # mdl.S should contain all subgraph embeddings
-            SR = ccorr(mdl.R[p], mdl.S)
+            if sub_algo == "var":
+                SR = ccorr(mdl.R[p], mdl.SV)
+            else:
+                SR = ccorr(mdl.R[p], mdl.SA)
             for s, o in sos:#[:self.neval[p]]:
                 count += 1
+                if sub_algo == "kl":
+                    scores_o = self.get_kl_divergence_scores(mdl, subgraphs, s, p, SUBTYPE.SPO)
                 scores_o = np.dot(SR, mdl.E[s]).flatten()
-                #print(scores_o)
                 #scores_o should contain scores for each subgraph using dot product
                 sortidx_o = argsort(scores_o)[::-1]
                 # sortidx_o has the indices for sorted subgraph scores

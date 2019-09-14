@@ -11,6 +11,7 @@ class Metadata():
         self.rel     = srel
         self.size    = ssize
         self.entities= copy.deepcopy(entities)
+
 class Subgraphs():
     def __init__(self):
         self.subgraphs = []
