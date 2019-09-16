@@ -39,7 +39,7 @@ _FILE_TAIL_PREDICTIONS_FILTERED = 'tail-predictions-filtered.txt'
 _FILE_HEAD_PREDICTIONS_UNFILTERED = 'head-predictions-unfiltered.txt'
 _FILE_HEAD_PREDICTIONS_FILTERED = 'head-predictions-filtered.txt'
 _FILE_INFO = 'info.txt'
-
+all_true_triples = []
 _SIM_RANK_C = 0.6
 _SIM_RANK_K = 5
 
@@ -145,14 +145,14 @@ class Experiment(object):
                 if count > mincard:
                     mean = current/count
                     self.avg_embeddings.append(mean)
-                    columnsSquareDiff = 0
+                    columnsSquareDiff = np.zeros(self.args.ncomp, dtype=np.float64)
                     for se in similar_entities:
                         columnsSquareDiff += (trn_model.E[se] - mean) * (trn_model.E[se] - mean)
                     if count > 2:
                         columnsSquareDiff /= (count-1)
+                    else:
+                        columnsSquareDiff = mean
                     self.var_embeddings.append(columnsSquareDiff)
-                    print("UNM : columns square diff (aka var embeddings) ")
-                    print(columnsSquareDiff)
                     # add subgraph
                     self.subgraphs.add_subgraphs(subType, prevo, prevp, count, similar_entities)
                     for se in similar_entities:
@@ -178,11 +178,13 @@ class Experiment(object):
         # After looping over all triples, add remaining entities to a subgraph
         if count > mincard:
             self.avg_embeddings.append(current/count)
-            columnsSquareDiff = 0
+            columnsSquareDiff = np.zeros(self.args.ncomp, dtype=np.float64)
             for se in similar_entities:
                 columnsSquareDiff += (trn_model.E[se] - mean) * (trn_model.E[se] - mean)
             if count > 2:
                 columnsSquareDiff /= (count-1)
+            else:
+                columnsSquareDiff = mean
             self.var_embeddings.append(columnsSquareDiff)
             # add subgraph
             self.subgraphs.add_subgraphs(subType, prevo, prevp, count, similar_entities)
@@ -220,7 +222,6 @@ class Experiment(object):
         #TODO: use subgraphs to find ranks, scores
         log.info("Computing SUBGRAPH positions and scores for TEST dataset...")
         time_start = timeit.default_timer()
-        print("UNM: dimensions ", self.args.ncomp)
         pos_test = self.ev_test.subgraph_positions(trn_model, self.subgraphs.subgraphs, sub_algo)
         subgraph_ranking_scores(self.fresult, pos_test, 'TEST', topk)
         time_end = timeit.default_timer()
@@ -377,7 +378,7 @@ class Experiment(object):
             #for sube in trn.model.S:
             #    print(type(sube) , " :" , sube)
             #print(type(self.avg_embeddings) , " : " , self.avg_embeddings[self.subgraphs.get_Nsubgraphs()-1])
-        if sub_algo == "var":
+        if sub_algo == "var" or sub_algo == "kl":
             trn_model.add_param('SV', (self.subgraphs.get_Nsubgraphs(), self.args.ncomp))
             trn_model.SV = self.var_embeddings
 
@@ -450,11 +451,13 @@ class Experiment(object):
         #with open(self.args.fin, 'rb') as fin:
         #    data = pickle.load(fin)
 
+        global all_true_triples
         file_path             = self.args.fin
         trident_db            = trident.Db(file_path)
         batch_size            = 1000
         percent_valid_triples = 0.01
         percent_test_triples  = 0.01
+        all_true_triples = trident_db.all()
         if trident_db.n_triples() < 1000:
             batch_size = 100
         batcher = trident.Batcher(file_path, batch_size, 1, percent_valid_triples, percent_test_triples)
@@ -729,49 +732,76 @@ class FilteredRankingEval(object):
             else:
                 self.neval[p] = np.int(np.ceil(neval * len(sos) / len(xs)))
 
+    def get_matching_entities(self, sub_type, e, r):
+        global all_true_triples
+        entities = []
+        for triple in all_true_triples:
+            if sub_type == SUBTYPE.SPO and triple[0] == e and triple[1] == r:
+                entities.append(triple[2])
+                if len(entities) == 10:
+                    return entities
+            elif triple[2] == e and triple[1] == r:
+                entities.append(triple[0])
+                if len(entities) == 10:
+                    return entities
+        return entities
+
     def get_kl_divergence_scores(self, model, subgraphs, ent, rel, sub_type):
         '''
-        Get the subgraph with this ent and rel. sample some entites for trueAvg and trueVar embeddings
-        now find KL divergence with these trueAvg and trueVar embeddings with all other subgraphs
+        Get the entities with this ent and rel from db.
+        sample some entites for trueAvg and trueVar embeddings
+        now find KL divergence with these trueAvg and trueVar embeddings
+        with all other subgraphs
         '''
-        summation = 0#np.zeros(self.args.ncomp, dtype=np.float64)
-        similar_entities = []
+        summation = np.zeros(50, dtype=np.float64)
         count = 0
-        matching_subgraph_found = False
+        scores = []
         ER = ccorr(model.R[rel], model.E)
-        print ("UNM : Entity : ", ent , " relation : ", rel)
+        # TODO: find true entities with this ent and rel in the database
+        me = self.get_matching_entities(sub_type, ent, rel)
+        for e in me:
+            summation += model.E[e]
+            count += 1
+        mean = summation / count
+        columnsSquareDiff = np.zeros(50, dtype=np.float64)
+        for e in me:
+            columnsSquareDiff += (model.E[e] - mean) * (model.E[e] - mean)
+        if count > 2:
+                columnsSquareDiff /= (count - 1)
+        else:
+            columnsSquareDiff = mean
+        true_avg_emb = mean
+        true_var_emb = columnsSquareDiff
+
+        # Calculate kl scores with all subgraphs
+
+        def calc_kl(sa, sv, qa, qv):
+            #sa = np.ndarray(50, dtype=np.float64)
+            #sv = np.ndarray(50, dtype=np.float64)
+            #sa = tempa
+            #sv = tempv
+            #print("UNM 1: ", type(sa))
+            #print("UNM 2: ", type(sv))
+            #print("UNM 3: ", type(qa))
+            #print("UNM 4: ", type(qv))
+            temp = ((qa - sa)**2 + qv**2 / (2*sv*sv))
+            #print("UNM : temp\n ", temp)
+            sv[sv<0] = sv[sv<0]*-1
+            qv[qv<0] = qv[qv<0]*-1
+            temp2 = np.log(np.sqrt(sv)/qv)
+            #print("UNM : temp2\n ", temp2)
+            temp3 = 0.5
+            ans = np.sum(temp + temp2 - temp3)
+            #print("UNM : type score = ", type(ans))
+            return np.sum(temp + temp2 - temp3)
         for i in range(len(subgraphs)):
             #print("Subgraphs ", str(i+1), ": ", subgraphs[i].ent , " , ", subgraphs[i].rel)
-            if subgraphs[i].ent == ent and subgraphs[i].rel == rel:
-                matching_subgraph_found = True
-                print("UNM: Subgraph contains ", subgraphs[i].size, " entities")
-                for j, e in enumerate(subgraphs[i].entities):
-                    summation += model.E[e]
-                    similar_entities.append(e)
-                    count += 1
-                    if j > 10:
-                        break
-                    mean = summation / count
-                    break
-        if not matching_subgraph_found:
-            if sub_type == SUBTYPE.POS:
-                mean = np.dot(model.E, ER[ent])
-            else:
-                mean = np.dot(ER, model.E[ent])
-            columnsSquareDiff = mean
-        else:
-            columnsSquareDiff = 0
-
-        for se in similar_entities:
-            columnsSquareDiff += (model.E[se] - mean) * (model.E[se] - mean)
-            if count > 2:
-                columnsSquareDiff /= (count - 1)
-        true_avg_embeddings = mean
-        true_var_embeddings = columnsSquareDiff
-        print("UNM: True avg and var embeddings : ")
-        print(true_avg_embeddings)
-        print(true_var_embeddings)
-        return None
+            if  subgraphs[i].subType  == sub_type and \
+                subgraphs[i].ent      == ent      and \
+                subgraphs[i].rel      == rel:
+                continue
+            scores.append(calc_kl(model.SA[i], model.SV[i], true_avg_emb, true_var_emb))
+        return scores
 
     def subgraph_positions(self, mdl, subgraphs, sub_algo):
         pos = {}
@@ -795,8 +825,15 @@ class FilteredRankingEval(object):
             for s, o in sos:#[:self.neval[p]]:
                 count += 1
                 if sub_algo == "kl":
+                    kl_ts = timeit.default_timer()
                     scores_o = self.get_kl_divergence_scores(mdl, subgraphs, s, p, SUBTYPE.SPO)
-                scores_o = np.dot(SR, mdl.E[s]).flatten()
+                    kl_te = timeit.default_timer()
+                    print("Time to compute KL div scores = %ds" % (kl_te-kl_ts))
+                else:
+                    scores_o = np.dot(SR, mdl.E[s]).flatten()
+                #print("UNM KL scores : ")
+                #print(scores_o)
+
                 #scores_o should contain scores for each subgraph using dot product
                 sortidx_o = argsort(scores_o)[::-1]
                 # sortidx_o has the indices for sorted subgraph scores
