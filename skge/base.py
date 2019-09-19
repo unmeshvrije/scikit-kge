@@ -39,9 +39,11 @@ _FILE_TAIL_PREDICTIONS_FILTERED = 'tail-predictions-filtered.txt'
 _FILE_HEAD_PREDICTIONS_UNFILTERED = 'head-predictions-unfiltered.txt'
 _FILE_HEAD_PREDICTIONS_FILTERED = 'head-predictions-filtered.txt'
 _FILE_INFO = 'info.txt'
-all_true_triples = []
 _SIM_RANK_C = 0.6
 _SIM_RANK_K = 5
+
+all_true_triples = []
+trident_db = None
 
 np.random.seed(42)
 
@@ -108,7 +110,7 @@ class Experiment(object):
         self.parser.add_argument('--subtest', dest = "subtest", help='Test with subgraphs', action='store_true')
         self.parser.add_argument('--minsubsize', type=int, help='Minimum subgraph size', default=50)
         self.parser.add_argument('--topk', type=int, help='Number of top subgraphs to check for evaluation', default=5)
-        self.parser.add_argument('--subalgo', type=str, help='Type of subgraph to create', default="avg")
+        self.parser.add_argument('--subalgo', type=str, help='Algo to use to create subgraphs', default="transe")
         self.parser.add_argument('--subdistance', type=str, help='Distance function to evaluate subgraphs on', default="avg")
         self.neval = -1
         self.best_valid_score = -1.0
@@ -125,7 +127,8 @@ class Experiment(object):
         prevp = -1
         subgraph_logfile="subgraphs-test.log"
         file_data = ""
-        for triple in sorted_triples:
+        cntTriples = len(sorted_triples)
+        for i, triple in enumerate(sorted_triples):
             sub = triple[0]
             obj = triple[1]
             rel = triple[2]
@@ -139,11 +142,13 @@ class Experiment(object):
                 #print ("subtype = " , subType)
                 ent = sub
                 other_ent = obj
-            if sub_algo == "hole":
-                ER = ccorr(trn_model.R[rel], trn_model.E)
+            #if sub_algo == "hole":
+            #    ER = ccorr(trn_model.R[rel], trn_model.E)
             if ent != prevo or rel != prevp:
                 if count > mincard:
+                    #print("UNM mean before div : ", current)
                     mean = current/count
+                    #print("UNM mean after div : ", mean)
                     self.avg_embeddings.append(mean)
                     columnsSquareDiff = np.zeros(self.args.ncomp, dtype=np.float64)
                     for se in similar_entities:
@@ -154,6 +159,8 @@ class Experiment(object):
                         columnsSquareDiff = mean
                     self.var_embeddings.append(columnsSquareDiff)
                     # add subgraph
+                    #print("UNM : avg emb : ", mean)
+                    #print("UNM : var emb : ", columnsSquareDiff)
                     self.subgraphs.add_subgraphs(subType, prevo, prevp, count, similar_entities)
                     for se in similar_entities:
                         file_data += str(se) + "\n"
@@ -167,12 +174,21 @@ class Experiment(object):
                 similar_entities.clear()
             count += 1
             if sub_algo == "transe":
+                print("UNM : adding ", trn_model.E[other_ent])
                 current += trn_model.E[other_ent]
             elif sub_algo == "hole":
                 if subType == SUBTYPE.POS:
-                    current += np.dot(trn_model.E, ER[other_ent])
+                    print("UNM : %d/%d" % (i, cntTriples))
+                    if not np.any(current):
+                        current = trn_model.E[other_ent]
+                    else:
+                        current = np.dot(trn_model.E[other_ent], current)
                 else:
-                    current += np.dot(ER, trn_model.E[other_ent])
+                    print("UNM : %d/%d" % (i, cntTriples))
+                    if not np.any(current):
+                        current = trn_model.E[other_ent]
+                    else:
+                        current = np.dot(current,trn_model.E[other_ent])
                 #current += trn_model.E[other_ent]
             similar_entities.append(other_ent)
         # After looping over all triples, add remaining entities to a subgraph
@@ -218,11 +234,11 @@ class Experiment(object):
         else:
             self.train()
 
-    def subgraph_callback(self, trn_model, topk, sub_algo):
+    def subgraph_callback(self, trn_model, topk, sub_algo, sub_dist):
         #TODO: use subgraphs to find ranks, scores
         log.info("Computing SUBGRAPH positions and scores for TEST dataset...")
         time_start = timeit.default_timer()
-        pos_test = self.ev_test.subgraph_positions(trn_model, self.subgraphs.subgraphs, sub_algo)
+        pos_test = self.ev_test.subgraph_positions(trn_model, self.subgraphs.subgraphs, sub_algo, sub_dist)
         subgraph_ranking_scores(self.fresult, pos_test, 'TEST', topk)
         time_end = timeit.default_timer()
         log.info("Time spent in computing SUBGRAPH positions and scores for TEST dataset = %ds" % (time_end - time_start))
@@ -324,6 +340,9 @@ class Experiment(object):
     def subgraphs_test(self):
         train_triples, valid_triples, test_triples, sz = self.get_all_triples()
         true_triples = train_triples + test_triples + valid_triples
+        log.info("*"*80)
+        log.info(len(true_triples))
+        log.info("UNM : "+ str(len(all_true_triples)))
         if self.args.mode == 'rank':
             self.ev_test = self.evaluator(test_triples, true_triples, self.neval)
             self.ev_valid = self.evaluator(valid_triples,true_triples, self.neval)
@@ -335,12 +354,26 @@ class Experiment(object):
         algo = self.algo
         epochs = self.args.me
         sub_algo = self.args.subalgo
+        sub_dist = self.args.subdistance
         mincard = self.args.minsubsize
         subgraph_embeddings_home = "/var/scratch/uji300/hole/"
         outfile = subgraph_embeddings_home + dataset + "-"+algo+"-epochs-" + str(epochs) + "-subalgo-" + sub_algo + "-tau-" + str(mincard) + ".result"
         fresult = open(outfile, "w")
         self.fresult = fresult
-        self.subgraph_callback(trn_model, topk, sub_algo)
+        self.subgraph_callback(trn_model, topk, sub_algo, sub_dist)
+
+    def remove_literals(self, triples):
+        global trident_db
+        clean_triples = []
+        for t in triples:
+            if -1 != trident_db.lookup_str(t[0]).find('"'):
+                continue
+            if -1 != trident_db.lookup_str(t[1]).find('"'):
+                continue
+            if -1 != trident_db.lookup_relstr(t[2]).find('"'):
+                continue
+            clean_triples.append(t)
+        return clean_triples
     '''
     input:
 
@@ -350,10 +383,14 @@ class Experiment(object):
     '''
     def subgraphs_create(self):
         train_triples, valid_triples, test_triples, sz = self.get_all_triples()
-        xs = train_triples
+        xs = train_triples + valid_triples + test_triples
         print ("Trying to make subgraphs...")
+        print("UNM : total triples : ", len(xs))
+        clean_triples = self.remove_literals(xs)
+        print("UNM: clean triples : ", len(clean_triples))
         mincard = self.args.minsubsize
         sub_algo = self.args.subalgo
+        sub_dist = self.args.subdistance
 
         dataset = self.args.fin.split('/')[-1].split('.')[0]
         algo = self.algo
@@ -362,17 +399,15 @@ class Experiment(object):
         results = Model.load(self.args.fout)
         trn_model = results['model']
 
-        sorted_ps = sorted(xs, key=lambda l : (l[2], l[0]))
+        sorted_ps = sorted(clean_triples, key=lambda l : (l[2], l[0]))
         #print ("calling with type = ", SUBTYPE.SPO)
         #print(sorted_ps)
         self.make_subgraphs(SUBTYPE.SPO, sorted_ps, mincard, trn_model, sub_algo)
 
-        sorted_po = sorted(xs, key=lambda l : (l[2], l[1]))
+        sorted_po = sorted(clean_triples, key=lambda l : (l[2], l[1]))
         #print ("calling with type = ", SUBTYPE.POS)
         self.make_subgraphs(SUBTYPE.POS, sorted_po, mincard, trn_model, sub_algo)
 
-            #print(np.shape(trn.model.S))
-            #print(len(trn.model.S))
         trn_model.add_param('SA', (self.subgraphs.get_Nsubgraphs(), self.args.ncomp))
         trn_model.SA = self.avg_embeddings
             #for sube in trn.model.S:
@@ -384,9 +419,9 @@ class Experiment(object):
 
         # Save subgraphs and model
         subgraph_embeddings_home = "/var/scratch/uji300/hole/"
-        subgraph_file_name= subgraph_embeddings_home + dataset + "-HolE-epochs-" + str(epochs) + "-subalgo-" + sub_algo + "-tau-" + str(mincard) + ".sub"
+        subgraph_file_name= subgraph_embeddings_home + dataset + "-HolE-epochs-" + str(epochs) + "-" + sub_dist + "-tau-" + str(mincard) + ".sub"
         self.subgraphs.save(subgraph_file_name)
-        model_file_name= subgraph_embeddings_home + dataset + "-HolE-epochs-" + str(epochs) + "-subalgo-" + sub_algo + "-tau-" + str(mincard) + ".mod"
+        model_file_name= subgraph_embeddings_home + dataset + "-HolE-epochs-" + str(epochs) + "-" + sub_dist + "-tau-" + str(mincard) + ".mod"
         trn_model.save(model_file_name)
 
     def fit_model(self, xs, ys, sz, setup_trainer=True, trainer=None):
@@ -452,6 +487,7 @@ class Experiment(object):
         #    data = pickle.load(fin)
 
         global all_true_triples
+        global trident_db
         file_path             = self.args.fin
         trident_db            = trident.Db(file_path)
         batch_size            = 1000
@@ -746,6 +782,14 @@ class FilteredRankingEval(object):
                     return entities
         return entities
 
+    def get_skip_subgraphs(self, subgraphs, ent, rel, sub_type):
+        for i in range(len(subgraphs)):
+            #print("Subgraphs ", str(i+1), ": ", subgraphs[i].ent , " , ", subgraphs[i].rel)
+            if  subgraphs[i].subType  == sub_type and \
+                subgraphs[i].ent      == ent      and \
+                subgraphs[i].rel      == rel:
+                return i
+
     def get_kl_divergence_scores(self, model, subgraphs, ent, rel, sub_type):
         '''
         Get the entities with this ent and rel from db.
@@ -795,15 +839,10 @@ class FilteredRankingEval(object):
             #print("UNM : type score = ", type(ans))
             return np.sum(temp + temp2 - temp3)
         for i in range(len(subgraphs)):
-            #print("Subgraphs ", str(i+1), ": ", subgraphs[i].ent , " , ", subgraphs[i].rel)
-            if  subgraphs[i].subType  == sub_type and \
-                subgraphs[i].ent      == ent      and \
-                subgraphs[i].rel      == rel:
-                continue
             scores.append(calc_kl(model.SA[i], model.SV[i], true_avg_emb, true_var_emb))
         return scores
 
-    def subgraph_positions(self, mdl, subgraphs, sub_algo):
+    def subgraph_positions(self, mdl, subgraphs, sub_algo, sub_dist):
         pos = {}
         # do equivalent of self.prepare_global(mdl)
         count = 0
@@ -818,21 +857,29 @@ class FilteredRankingEval(object):
 
             # do self.prepare(mdl, p ) # calculate ccorr(p , all subgraphs)
             # mdl.S should contain all subgraph embeddings
-            if sub_algo == "var":
+            if sub_dist == "var":
                 SR = ccorr(mdl.R[p], mdl.SV)
             else:
                 SR = ccorr(mdl.R[p], mdl.SA)
+            # for var1 var 2,
+            # calculate variance based scores with subgraphs' variance embeddings
+            # and rearrange ranks
             for s, o in sos:#[:self.neval[p]]:
                 count += 1
-                if sub_algo == "kl":
+                if sub_dist == "kl":
                     kl_ts = timeit.default_timer()
                     scores_o = self.get_kl_divergence_scores(mdl, subgraphs, s, p, SUBTYPE.SPO)
                     kl_te = timeit.default_timer()
-                    print("Time to compute KL div scores = %ds" % (kl_te-kl_ts))
+                    #print("Time to compute KL div scores = %ds" % (kl_te-kl_ts))
                 else:
                     scores_o = np.dot(SR, mdl.E[s]).flatten()
                 #print("UNM KL scores : ")
                 #print(scores_o)
+
+                # are there any subgraphs with this S and P with subgraph type SPO
+                # then set their scores to Inf
+                skip_sub_index = self.get_skip_subgraphs(subgraphs, s, p, SUBTYPE.SPO)
+                scores_o[skip_sub_index] = -np.Inf
 
                 #scores_o should contain scores for each subgraph using dot product
                 sortidx_o = argsort(scores_o)[::-1]
