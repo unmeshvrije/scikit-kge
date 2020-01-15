@@ -17,11 +17,6 @@ class HolE(Model):
         self.add_param('R', (self.sz[2], self.ncomp))
 
     def _scores(self, ss, ps, os):
-        #print ("UNM$$ ss = {}, ps = {}, os = {}".format(ss, ps, os))
-        #print ("UNM$$ ps shape = {}", np.shape(ps))
-        #print ("UNM$$ ss shape = {}", np.shape(ss))
-        #print ("UNM$$ R[ps],shape = {}", np.shape(self.R[ps]));
-        #print ("UNM$$ E[ss],shape = {}", np.shape(self.E[ss]));
         return np.sum(self.R[ps] * ccorr(self.E[ss], self.E[os]), axis=1)
 
     def _gradients(self, xys):
@@ -49,15 +44,12 @@ class HolE(Model):
     def _pairwise_gradients(self, pxs, nxs):
         # indices of positive examples
         sp, pp, op = unzip_triples(pxs)
-        #print ("UNM$$$ sp : {}, pp = {} , op = {}".format(sp, pp, op))
         # indices of negative examples
         sn, pn, on = unzip_triples(nxs)
-        #print ("UNM$$$ sn : {}, pn = {} , on = {}".format(sn, pn, on))
 
         pscores = self.af.f(self._scores(sp, pp, op))
         nscores = self.af.f(self._scores(sn, pn, on))
 
-        #print("UNM$$$ positive and negative samples total = ", len(pxs) + len(nxs))
         #print("avg = %f/%f, min = %f/%f, max = %f/%f" % (pscores.mean(), nscores.mean(), pscores.min(), nscores.min(), pscores.max(), nscores.max()))
 
         # find examples that violate margin

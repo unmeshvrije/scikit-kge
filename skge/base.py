@@ -146,9 +146,7 @@ class Experiment(object):
             #    ER = ccorr(trn_model.R[rel], trn_model.E)
             if ent != prevo or rel != prevp:
                 if count > mincard:
-                    #print("UNM mean before div : ", current)
                     mean = current/count
-                    #print("UNM mean after div : ", mean)
                     self.avg_embeddings.append(mean)
                     columnsSquareDiff = np.zeros(self.args.ncomp, dtype=np.float64)
                     for se in similar_entities:
@@ -159,8 +157,6 @@ class Experiment(object):
                         columnsSquareDiff = mean
                     self.var_embeddings.append(columnsSquareDiff)
                     # add subgraph
-                    #print("UNM : avg emb : ", mean)
-                    #print("UNM : var emb : ", columnsSquareDiff)
                     self.subgraphs.add_subgraphs(subType, prevo, prevp, count, similar_entities)
                     for se in similar_entities:
                         file_data += str(se) + "\n"
@@ -174,17 +170,14 @@ class Experiment(object):
                 similar_entities.clear()
             count += 1
             if sub_algo == "transe":
-                print("UNM : adding ", trn_model.E[other_ent])
                 current += trn_model.E[other_ent]
             elif sub_algo == "hole":
                 if subType == SUBTYPE.POS:
-                    print("UNM : %d/%d" % (i, cntTriples))
                     if not np.any(current):
                         current = trn_model.E[other_ent]
                     else:
                         current = np.dot(trn_model.E[other_ent], current)
                 else:
-                    print("UNM : %d/%d" % (i, cntTriples))
                     if not np.any(current):
                         current = trn_model.E[other_ent]
                     else:
@@ -342,7 +335,6 @@ class Experiment(object):
         true_triples = train_triples + test_triples + valid_triples
         log.info("*"*80)
         log.info(len(true_triples))
-        log.info("UNM : "+ str(len(all_true_triples)))
         if self.args.mode == 'rank':
             self.ev_test = self.evaluator(test_triples, true_triples, self.neval)
             self.ev_valid = self.evaluator(valid_triples,true_triples, self.neval)
@@ -385,9 +377,7 @@ class Experiment(object):
         train_triples, valid_triples, test_triples, sz = self.get_all_triples()
         xs = train_triples + valid_triples + test_triples
         print ("Trying to make subgraphs...")
-        print("UNM : total triples : ", len(xs))
         clean_triples = self.remove_literals(xs)
-        print("UNM: clean triples : ", len(clean_triples))
         mincard = self.args.minsubsize
         sub_algo = self.args.subalgo
         sub_dist = self.args.subdistance
@@ -824,19 +814,12 @@ class FilteredRankingEval(object):
             #sv = np.ndarray(50, dtype=np.float64)
             #sa = tempa
             #sv = tempv
-            #print("UNM 1: ", type(sa))
-            #print("UNM 2: ", type(sv))
-            #print("UNM 3: ", type(qa))
-            #print("UNM 4: ", type(qv))
             temp = ((qa - sa)**2 + qv**2 / (2*sv*sv))
-            #print("UNM : temp\n ", temp)
             sv[sv<0] = sv[sv<0]*-1
             qv[qv<0] = qv[qv<0]*-1
             temp2 = np.log(np.sqrt(sv)/qv)
-            #print("UNM : temp2\n ", temp2)
             temp3 = 0.5
             ans = np.sum(temp + temp2 - temp3)
-            #print("UNM : type score = ", type(ans))
             return np.sum(temp + temp2 - temp3)
         for i in range(len(subgraphs)):
             scores.append(calc_kl(model.SA[i], model.SV[i], true_avg_emb, true_var_emb))
@@ -873,7 +856,6 @@ class FilteredRankingEval(object):
                     #print("Time to compute KL div scores = %ds" % (kl_te-kl_ts))
                 else:
                     scores_o = np.dot(SR, mdl.E[s]).flatten()
-                #print("UNM KL scores : ")
                 #print(scores_o)
 
                 # are there any subgraphs with this S and P with subgraph type SPO
