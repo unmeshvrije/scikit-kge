@@ -357,7 +357,7 @@ class Experiment(object):
         sub_dist = self.args.subdistance
         mincard = self.args.minsubsize
         subgraph_embeddings_home = "/var/scratch/uji300/hole/"
-        outfile = subgraph_embeddings_home + dataset + "-"+algo+"-epochs-" + str(epochs) + "-subalgo-" + sub_algo + "-tau-" + str(mincard) + ".result"
+        outfile = subgraph_embeddings_home + dataset + "_"+sub_algo+ "-dist-" + sub_dist + "-tau-" + str(mincard)+"-topK-"+ str(topk) + ".result"
         fresult = open(outfile, "w")
         self.fresult = fresult
         self.subgraph_callback(trn_model, topk, sub_algo, sub_dist)
