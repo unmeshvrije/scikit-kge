@@ -111,3 +111,37 @@ AdaGrad method of [Duchi et al., 2011](http://jmlr.org/papers/volume12/duchi11a/
 
 ### Sampling
 sckit-kge implements different strategies to sample negative examples.
+
+
+### Using Subgraphs embeddings
+
+Following are the snippets of the shell scripts that create model embeddings, create subgraph embeddings and test them.
+
+First, create/assign various parameters.
+```
+model = "HolE"
+DB = "lubm1" # Name of the dataset
+EPOCH = 50 # Number of epochs
+SUBTYPE = "avg" # How should the subgraphs be prepared avg or var
+MS = 10 # Minimum Subgraph Size
+SUBALGO = "hole"
+```
+
+Create file names for embeddings, models and subgraphs.
+```
+model_embeddings_file="/path/to/model/embeddings"
+subgraph_embeddings_home="/path/to/result/directory/"
+subfile_name=$subgraph_embeddings_home"$DB-$model-epochs-$EPOCH-$SUBTYPE-tau-$MS"".sub"
+model_file_name=$subgraph_embeddings_home"$DB-$model-epochs-$EPOCH-$SUBTYPE-tau-$MS"".mod"
+```
+We use [trident](https://github.com/karmaresearch/trident) to load the datasets.
+
+Create model embeddings (here HolE)
+`python run_hole.py --fin /path/to/trident/db/of/dataset  --test-all 100 --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --fout $model_embeddings_file`
+
+Generate subgraphs for $DB with mincard $MS and algo $SUBALGO (Note the `--subcreate` parameter)
+`python run_hole.py --fin /var/scratch/uji300/trident/$DB  --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --subcreate --minsubsize $MS --subalgo $SUBALGO --subdistance $SUBTYPE --fout $hole_embeddings_file`
+                fi
+
+Test the accuracy with subgraphs (with the `--subtest` parameter)
+`python run_hole.py --fin /var/scratch/uji300/trident/$DB  --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --subtest --minsubsize $MS --subalgo $SUBALGO --subdistance $SUBTYPE --fout $model_file_name  --fsub $subfile_name --topk $TOPK`
