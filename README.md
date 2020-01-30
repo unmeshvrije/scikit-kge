@@ -143,10 +143,12 @@ python run_hole.py --fin /path/to/trident/db/of/dataset  --test-all 100 --nb 100
 
 Generate subgraphs for $DB with mincard $MS and algo $SUBALGO (Note the `--subcreate` parameter)
 ```
-python run_hole.py --fin /var/scratch/uji300/trident/$DB  --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --subcreate --minsubsize $MS --subalgo $SUBALGO --subdistance $SUBTYPE --fout $model_embeddings_file
+python run_hole.py --fin /path/to/trident/db/of/dataset  --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --subcreate --minsubsize $MS --subalgo $SUBALGO --subdistance $SUBTYPE --fout $model_embeddings_file
 ```
 
-Test the accuracy with subgraphs (with the `--subtest` parameter)
+Test the accuracy with subgraphs (with the `--subtest` parameter).
+
 ```
-python run_hole.py --fin /var/scratch/uji300/trident/$DB  --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --subtest --minsubsize $MS --subalgo $SUBALGO --subdistance $SUBTYPE --fout $model_file_name  --fsub $subfile_name --topk $TOPK
+TOPK = 10 # Number of top K subgraphs
+python run_hole.py --fin /path/to/trident/db/of/dataset  --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --subtest --minsubsize $MS --subalgo $SUBALGO --subdistance $SUBTYPE --fout $model_file_name  --fsub $subfile_name --topk $TOPK
 ```
