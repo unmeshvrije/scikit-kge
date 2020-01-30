@@ -137,11 +137,16 @@ model_file_name=$subgraph_embeddings_home"$DB-$model-epochs-$EPOCH-$SUBTYPE-tau-
 We use [trident](https://github.com/karmaresearch/trident) to load the datasets.
 
 Create model embeddings (here HolE)
-`python run_hole.py --fin /path/to/trident/db/of/dataset  --test-all 100 --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --fout $model_embeddings_file`
+```
+python run_hole.py --fin /path/to/trident/db/of/dataset  --test-all 100 --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --fout $model_embeddings_file
+```
 
 Generate subgraphs for $DB with mincard $MS and algo $SUBALGO (Note the `--subcreate` parameter)
-`python run_hole.py --fin /var/scratch/uji300/trident/$DB  --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --subcreate --minsubsize $MS --subalgo $SUBALGO --subdistance $SUBTYPE --fout $hole_embeddings_file`
-                fi
+```
+python run_hole.py --fin /var/scratch/uji300/trident/$DB  --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --subcreate --minsubsize $MS --subalgo $SUBALGO --subdistance $SUBTYPE --fout $model_embeddings_file
+```
 
 Test the accuracy with subgraphs (with the `--subtest` parameter)
-`python run_hole.py --fin /var/scratch/uji300/trident/$DB  --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --subtest --minsubsize $MS --subalgo $SUBALGO --subdistance $SUBTYPE --fout $model_file_name  --fsub $subfile_name --topk $TOPK`
+```
+python run_hole.py --fin /var/scratch/uji300/trident/$DB  --nb 1000 --me $EPOCH --margin 0.2 --lr 0.1 --ncomp 50 --subtest --minsubsize $MS --subalgo $SUBALGO --subdistance $SUBTYPE --fout $model_file_name  --fsub $subfile_name --topk $TOPK
+```
